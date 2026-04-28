@@ -26,9 +26,8 @@ const KEYWORD_QUERY =
   ' "interview" OR "we are excited" OR "your application")';
 
 const GEMINI_MODEL = 'gemini-flash-latest';
-const MAX_THREADS_PER_RUN = 18;
-const REQUEST_DELAY_MS = 7000;
-const MAX_RUNTIME_MS = 4 * 60 * 1000;
+const MAX_THREADS_PER_RUN = 100;
+const REQUEST_DELAY_MS = 0;
 
 const EXTRACTION_PROMPT = [
   'You analyze a single email message and extract structured info about a job application.',
@@ -62,7 +61,6 @@ function syncNow() {
   const geminiKey = prop('GEMINI_API_KEY', '');
   if (!geminiKey) throw new Error('Set GEMINI_API_KEY in script properties');
 
-  const startedAt = Date.now();
   const query = KEYWORD_QUERY.replace('{LOOKBACK}', String(lookback));
   const allThreads = GmailApp.search(query, 0, 100);
 
@@ -84,10 +82,8 @@ function syncNow() {
 
   const apps = [];
   let quotaHit = false;
-  let timedOut = false;
   let processed = 0;
   for (let i = 0; i < todo.length; i++) {
-    if (Date.now() - startedAt > MAX_RUNTIME_MS) { timedOut = true; break; }
     const thread = todo[i];
     const msgs = thread.getMessages();
     const msg = msgs[msgs.length - 1];
@@ -100,13 +96,11 @@ function syncNow() {
       result.emailDate = msg.getDate().toISOString().slice(0, 10);
       apps.push(result);
     }
-    if (i < todo.length - 1) Utilities.sleep(REQUEST_DELAY_MS);
   }
 
   seenStore.setProperty('SEEN_THREAD_IDS', JSON.stringify(seen));
 
   if (quotaHit) Logger.log('Stopped early: Gemini quota exhausted.');
-  if (timedOut) Logger.log('Stopped early: approaching execution time limit.');
   Logger.log('Processed this run: ' + processed + ', extracted: ' + apps.length);
 
   if (apps.length === 0) {
