@@ -25,7 +25,7 @@ const KEYWORD_QUERY =
   ' "job application" OR "we received your application" OR' +
   ' "interview" OR "we are excited" OR "your application")';
 
-const GEMINI_MODEL = 'gemini-2.5-flash';
+const GEMINI_MODEL = 'gemini-flash-latest';
 const MAX_THREADS_PER_RUN = 25;
 const REQUEST_DELAY_MS = 12000;
 
