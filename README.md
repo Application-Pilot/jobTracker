@@ -87,14 +87,48 @@ to make sure write access works — it will land in your Sheet immediately.
 The upsert endpoint deduplicates by `emailSubject + emailDate`, so re-running
 `syncNow` won't create duplicates.
 
-## Deploy
+## Deploy to Google Cloud Run (cheap, scales to zero)
+
+Cloud Run scales to zero when nobody's hitting it, so a personal tracker
+typically costs **$0/month** under the free tier (2M requests, 360k GB-s,
+180k vCPU-s per month).
+
+### Prereqs
+
+- Install gcloud: <https://cloud.google.com/sdk/docs/install>
+- `gcloud auth login`
+- A billing account attached to your project (free tier still requires one)
+- Python 3 (used by `deploy.sh` to extract the key from `cred.json`)
+
+### Deploy
 
 ```bash
-npx vercel
+./deploy.sh
 ```
 
-Set the same env vars in the Vercel project settings. Update the Apps
-Script's `DASHBOARD_BASE_URL` to the deployed URL.
+The script will:
+1. Enable Cloud Run, Cloud Build, Artifact Registry, Secret Manager APIs
+2. Upload your service account private key to **Secret Manager**
+   (read straight from `cred.json`, never stored as a plain env var)
+3. Grant the Cloud Run runtime SA permission to read that secret
+4. Build the container with Cloud Build (no local Docker required)
+5. Deploy to Cloud Run with `min-instances=0`, `max-instances=2`, 512Mi
+6. Print the public URL
+
+Override defaults with env vars:
+
+```bash
+PROJECT_ID=my-other-project REGION=us-east1 ./deploy.sh
+```
+
+Use the printed URL as `DASHBOARD_BASE_URL` in the Apps Script properties.
+
+### Iterate
+
+Re-running `./deploy.sh` after code changes does a fresh build + zero-downtime
+rollout. If you only changed env vars or rotated the service account key
+(updating `cred.json`), the script handles that too — it'll add a new secret
+version.
 
 ## Useful behaviors
 
