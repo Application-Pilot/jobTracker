@@ -5,7 +5,7 @@
 #   1. gcloud CLI installed + `gcloud auth login` + `gcloud auth configure-docker`
 #   2. Set PROJECT_ID below (or override with: PROJECT_ID=foo ./deploy.sh)
 #   3. cred.json present at project root (your service account JSON)
-#   4. .env.local with GOOGLE_SHEETS_ID and GOOGLE_SERVICE_ACCOUNT_EMAIL
+#   4. .env.local with all required vars
 #
 # What it does:
 #   - Enables required APIs
@@ -21,16 +21,17 @@ REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-jobtracker}"
 SECRET_NAME="${SECRET_NAME:-google-service-account-key}"
 
-# Pull GOOGLE_SHEETS_ID + GOOGLE_SERVICE_ACCOUNT_EMAIL from .env.local
+# Pull all required env vars from .env.local
 if [[ ! -f .env.local ]]; then
   echo "Missing .env.local — create it first (see README)." >&2
   exit 1
 fi
-# shellcheck disable=SC2046
-export $(grep -E '^(GOOGLE_SHEETS_ID|GOOGLE_SERVICE_ACCOUNT_EMAIL|SYNC_SHARED_SECRET)=' .env.local | sed 's/^/export /' | xargs -I{} echo {})
+
 GOOGLE_SHEETS_ID="$(grep -E '^GOOGLE_SHEETS_ID=' .env.local | cut -d= -f2-)"
 GOOGLE_SERVICE_ACCOUNT_EMAIL="$(grep -E '^GOOGLE_SERVICE_ACCOUNT_EMAIL=' .env.local | cut -d= -f2-)"
 SYNC_SHARED_SECRET="$(grep -E '^SYNC_SHARED_SECRET=' .env.local | cut -d= -f2- || true)"
+GEMINI_API_KEY="$(grep -E '^GEMINI_API_KEY=' .env.local | cut -d= -f2- || true)"
+DASHBOARD_BASE_URL="$(grep -E '^DASHBOARD_BASE_URL=' .env.local | cut -d= -f2- || true)"
 
 if [[ ! -f cred.json ]]; then
   echo "Missing cred.json (service account JSON)." >&2
@@ -70,6 +71,12 @@ ENV_VARS="GOOGLE_SHEETS_ID=${GOOGLE_SHEETS_ID},GOOGLE_SERVICE_ACCOUNT_EMAIL=${GO
 if [[ -n "$SYNC_SHARED_SECRET" ]]; then
   ENV_VARS="${ENV_VARS},SYNC_SHARED_SECRET=${SYNC_SHARED_SECRET}"
 fi
+if [[ -n "$GEMINI_API_KEY" ]]; then
+  ENV_VARS="${ENV_VARS},GEMINI_API_KEY=${GEMINI_API_KEY}"
+fi
+if [[ -n "$DASHBOARD_BASE_URL" ]]; then
+  ENV_VARS="${ENV_VARS},DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL}"
+fi
 
 echo "▶ Building + deploying (this takes 2-4 min)..."
 gcloud run deploy "$SERVICE" \
@@ -87,4 +94,4 @@ gcloud run deploy "$SERVICE" \
 URL="$(gcloud run services describe "$SERVICE" --region "$REGION" --format='value(status.url)')"
 echo
 echo "✅ Deployed: $URL"
-echo "   Use this as DASHBOARD_BASE_URL in your Apps Script."
+echo "   Use this as DASHBOARD_BASE_URL in your .env.local if not already set."
