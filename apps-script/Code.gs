@@ -27,7 +27,7 @@ const KEYWORD_QUERY =
 
 const GEMINI_MODEL = 'gemini-flash-latest';
 const MAX_THREADS_PER_RUN = 100;
-const REQUEST_DELAY_MS = 0;
+const REQUEST_DELAY_MS = 500;
 
 const EXTRACTION_PROMPT = [
   'You analyze a single email message and extract structured info about a job application.',
@@ -96,6 +96,7 @@ function syncNow() {
       result.emailDate = msg.getDate().toISOString().slice(0, 10);
       apps.push(result);
     }
+    if (i < todo.length - 1) Utilities.sleep(REQUEST_DELAY_MS);
   }
 
   seenStore.setProperty('SEEN_THREAD_IDS', JSON.stringify(seen));
