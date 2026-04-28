@@ -27,7 +27,7 @@ const KEYWORD_QUERY =
 
 const GEMINI_MODEL = 'gemini-flash-latest';
 const MAX_THREADS_PER_RUN = 30;
-const REQUEST_DELAY_MS = 200;
+const REQUEST_DELAY_MS = 1000;
 
 const EXTRACTION_PROMPT = [
   'You analyze a single email message and extract structured info about a job application.',
