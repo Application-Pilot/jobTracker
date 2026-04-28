@@ -26,8 +26,8 @@ const KEYWORD_QUERY =
   ' "interview" OR "we are excited" OR "your application")';
 
 const GEMINI_MODEL = 'gemini-flash-latest';
-const MAX_THREADS_PER_RUN = 100;
-const REQUEST_DELAY_MS = 500;
+const MAX_THREADS_PER_RUN = 30;
+const REQUEST_DELAY_MS = 200;
 
 const EXTRACTION_PROMPT = [
   'You analyze a single email message and extract structured info about a job application.',
