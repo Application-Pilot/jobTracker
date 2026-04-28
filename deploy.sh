@@ -41,7 +41,7 @@ echo "▶ Project: $PROJECT_ID  Region: $REGION  Service: $SERVICE"
 
 gcloud config set project "$PROJECT_ID" >/dev/null
 
-echo "▶ Enabling APIs (run, cloudbuild, artifactregistry, secretmanager)…"
+echo "▶ Enabling APIs (run, cloudbuild, artifactregistry, secretmanager)..."
 gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
@@ -52,14 +52,14 @@ gcloud services enable \
 PRIVATE_KEY="$(python3 -c 'import json,sys; print(json.load(open("cred.json"))["private_key"], end="")')"
 
 if gcloud secrets describe "$SECRET_NAME" >/dev/null 2>&1; then
-  echo "▶ Updating secret $SECRET_NAME…"
+  echo "▶ Updating secret $SECRET_NAME..."
   printf '%s' "$PRIVATE_KEY" | gcloud secrets versions add "$SECRET_NAME" --data-file=- >/dev/null
 else
-  echo "▶ Creating secret $SECRET_NAME…"
+  echo "▶ Creating secret $SECRET_NAME..."
   printf '%s' "$PRIVATE_KEY" | gcloud secrets create "$SECRET_NAME" --replication-policy=automatic --data-file=- >/dev/null
 fi
 
-# Allow the Cloud Run runtime service account (default: PROJECT_NUMBER-compute@…) to read the secret.
+# Allow the Cloud Run runtime service account (default: PROJECT_NUMBER-compute@...) to read the secret.
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 RUNTIME_SA="${PROJECT_NUMBER}-compute@developer.gserviceaccount.com"
 gcloud secrets add-iam-policy-binding "$SECRET_NAME" \
@@ -71,7 +71,7 @@ if [[ -n "$SYNC_SHARED_SECRET" ]]; then
   ENV_VARS="${ENV_VARS},SYNC_SHARED_SECRET=${SYNC_SHARED_SECRET}"
 fi
 
-echo "▶ Building + deploying (this takes 2-4 min)…"
+echo "▶ Building + deploying (this takes 2-4 min)..."
 gcloud run deploy "$SERVICE" \
   --source . \
   --region "$REGION" \
