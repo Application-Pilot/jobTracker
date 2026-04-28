@@ -54,6 +54,7 @@ function prop(name, fallback) {
 }
 
 function syncNow() {
+  const startTime = Date.now();
   const lookback = parseInt(prop('LOOKBACK_DAYS', '14'), 10);
   const baseUrl = prop('DASHBOARD_BASE_URL', '');
   if (!baseUrl) throw new Error('Set DASHBOARD_BASE_URL in script properties');
@@ -62,7 +63,9 @@ function syncNow() {
   if (!geminiKey) throw new Error('Set GEMINI_API_KEY in script properties');
 
   const query = KEYWORD_QUERY.replace('{LOOKBACK}', String(lookback));
+  Logger.log('Searching Gmail for: ' + query);
   const allThreads = GmailApp.search(query, 0, 100);
+  Logger.log('Gmail search completed in ' + (Date.now() - startTime) + 'ms');
 
   const seenStore = PropertiesService.getScriptProperties();
   const seenRaw = seenStore.getProperty('SEEN_THREAD_IDS') || '{}';
@@ -83,11 +86,19 @@ function syncNow() {
   const apps = [];
   let quotaHit = false;
   let processed = 0;
+  const MAX_RUN_TIME_MS = 300000; // 5 minutes, stop before 6-minute limit
   for (let i = 0; i < todo.length; i++) {
+    if (Date.now() - startTime > MAX_RUN_TIME_MS) {
+      Logger.log('Stopping early: approaching 6-minute timeout (ran for ' + Math.round((Date.now() - startTime) / 1000) + 's)');
+      break;
+    }
     const thread = todo[i];
+    Logger.log('Processing thread ' + (i + 1) + '/' + todo.length);
     const msgs = thread.getMessages();
     const msg = msgs[msgs.length - 1];
+    Logger.log('Calling Gemini for thread ' + (i + 1));
     const result = extractWithGemini(geminiKey, msg);
+    Logger.log('Gemini returned for thread ' + (i + 1) + ': ' + (result === 'QUOTA' ? 'QUOTA' : result ? 'success' : 'skip'));
     if (result === 'QUOTA') { quotaHit = true; break; }
     seen[thread.getId()] = 1;
     processed++;
@@ -149,12 +160,15 @@ function extractWithGemini(apiKey, msg) {
     },
   };
 
+  const fetchStart = Date.now();
+  Logger.log('Fetching Gemini API...');
   const res = UrlFetchApp.fetch(url, {
     method: 'post',
     contentType: 'application/json',
     payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
+  Logger.log('Gemini API responded in ' + (Date.now() - fetchStart) + 'ms with code ' + res.getResponseCode());
   if (res.getResponseCode() === 429) {
     Logger.log('Gemini quota hit (429) — stopping run.');
     return 'QUOTA';
