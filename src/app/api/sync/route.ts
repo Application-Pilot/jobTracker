@@ -241,17 +241,21 @@ async function runSync() {
 }
 
 export async function POST(req: Request) {
-  const authHeader = req.headers.get('authorization');
+  // Optional auth check: if SYNC_SHARED_SECRET is set, require it in Authorization header
   const secret = process.env.SYNC_SHARED_SECRET;
-
-  if (secret && authHeader !== `Bearer ${secret}`) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-      status: 401,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  if (secret) {
+    const authHeader = req.headers.get('authorization') || '';
+    if (authHeader !== `Bearer ${secret}`) {
+      console.log('Auth failed: expected "Bearer ' + secret + '", got "' + authHeader + '"');
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   try {
+    console.log('Sync request authorized');
     const apps = await runSync();
     return new Response(JSON.stringify({ success: true, extracted: apps.length }), {
       status: 200,
