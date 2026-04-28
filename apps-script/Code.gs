@@ -26,8 +26,9 @@ const KEYWORD_QUERY =
   ' "interview" OR "we are excited" OR "your application")';
 
 const GEMINI_MODEL = 'gemini-flash-latest';
-const MAX_THREADS_PER_RUN = 25;
-const REQUEST_DELAY_MS = 12000;
+const MAX_THREADS_PER_RUN = 18;
+const REQUEST_DELAY_MS = 7000;
+const MAX_RUNTIME_MS = 4 * 60 * 1000;
 
 const EXTRACTION_PROMPT = [
   'You analyze a single email message and extract structured info about a job application.',
@@ -61,30 +62,52 @@ function syncNow() {
   const geminiKey = prop('GEMINI_API_KEY', '');
   if (!geminiKey) throw new Error('Set GEMINI_API_KEY in script properties');
 
+  const startedAt = Date.now();
   const query = KEYWORD_QUERY.replace('{LOOKBACK}', String(lookback));
-  const allThreads = GmailApp.search(query, 0, 50);
-  const threads = allThreads.slice(0, MAX_THREADS_PER_RUN);
+  const allThreads = GmailApp.search(query, 0, 100);
+
+  const seenStore = PropertiesService.getScriptProperties();
+  const seenRaw = seenStore.getProperty('SEEN_THREAD_IDS') || '{}';
+  let seen;
+  try { seen = JSON.parse(seenRaw); } catch (e) { seen = {}; }
+
+  const pending = allThreads.filter(function (t) {
+    return !seen[t.getId()];
+  });
+  const todo = pending.slice(0, MAX_THREADS_PER_RUN);
+
   Logger.log(
     'Threads matched: ' + allThreads.length +
-    ' (processing ' + threads.length + ')',
+    ' (already processed: ' + (allThreads.length - pending.length) +
+    ', this run: ' + todo.length + ')',
   );
 
   const apps = [];
   let quotaHit = false;
-  for (let i = 0; i < threads.length; i++) {
-    if (quotaHit) break;
-    const msgs = threads[i].getMessages();
+  let timedOut = false;
+  let processed = 0;
+  for (let i = 0; i < todo.length; i++) {
+    if (Date.now() - startedAt > MAX_RUNTIME_MS) { timedOut = true; break; }
+    const thread = todo[i];
+    const msgs = thread.getMessages();
     const msg = msgs[msgs.length - 1];
     const result = extractWithGemini(geminiKey, msg);
     if (result === 'QUOTA') { quotaHit = true; break; }
+    seen[thread.getId()] = 1;
+    processed++;
     if (result) {
       result.emailSubject = msg.getSubject() || '';
       result.emailDate = msg.getDate().toISOString().slice(0, 10);
       apps.push(result);
     }
-    if (i < threads.length - 1) Utilities.sleep(REQUEST_DELAY_MS);
+    if (i < todo.length - 1) Utilities.sleep(REQUEST_DELAY_MS);
   }
+
+  seenStore.setProperty('SEEN_THREAD_IDS', JSON.stringify(seen));
+
   if (quotaHit) Logger.log('Stopped early: Gemini quota exhausted.');
+  if (timedOut) Logger.log('Stopped early: approaching execution time limit.');
+  Logger.log('Processed this run: ' + processed + ', extracted: ' + apps.length);
 
   if (apps.length === 0) {
     Logger.log('Nothing to upsert.');
@@ -178,4 +201,9 @@ function removeTriggers() {
   ScriptApp.getProjectTriggers().forEach(function (t) {
     if (t.getHandlerFunction() === 'syncNow') ScriptApp.deleteTrigger(t);
   });
+}
+
+function resetSeenThreads() {
+  PropertiesService.getScriptProperties().deleteProperty('SEEN_THREAD_IDS');
+  Logger.log('Cleared seen-thread cache. Next syncNow will reprocess everything.');
 }
