@@ -25,7 +25,9 @@ const KEYWORD_QUERY =
   ' "job application" OR "we received your application" OR' +
   ' "interview" OR "we are excited" OR "your application")';
 
-const GEMINI_MODEL = 'gemini-2.0-flash';
+const GEMINI_MODEL = 'gemini-2.5-flash';
+const MAX_THREADS_PER_RUN = 25;
+const REQUEST_DELAY_MS = 12000;
 
 const EXTRACTION_PROMPT = [
   'You analyze a single email message and extract structured info about a job application.',
@@ -60,22 +62,29 @@ function syncNow() {
   if (!geminiKey) throw new Error('Set GEMINI_API_KEY in script properties');
 
   const query = KEYWORD_QUERY.replace('{LOOKBACK}', String(lookback));
-  const threads = GmailApp.search(query, 0, 50);
-  Logger.log('Threads matched: ' + threads.length);
+  const allThreads = GmailApp.search(query, 0, 50);
+  const threads = allThreads.slice(0, MAX_THREADS_PER_RUN);
+  Logger.log(
+    'Threads matched: ' + allThreads.length +
+    ' (processing ' + threads.length + ')',
+  );
 
   const apps = [];
-  threads.forEach(function (thread) {
-    const msgs = thread.getMessages();
+  let quotaHit = false;
+  for (let i = 0; i < threads.length; i++) {
+    if (quotaHit) break;
+    const msgs = threads[i].getMessages();
     const msg = msgs[msgs.length - 1];
-    const parsed = extractWithGemini(geminiKey, msg);
-    if (!parsed) return;
-    parsed.emailSubject = msg.getSubject() || '';
-    parsed.emailDate = msg
-      .getDate()
-      .toISOString()
-      .slice(0, 10);
-    apps.push(parsed);
-  });
+    const result = extractWithGemini(geminiKey, msg);
+    if (result === 'QUOTA') { quotaHit = true; break; }
+    if (result) {
+      result.emailSubject = msg.getSubject() || '';
+      result.emailDate = msg.getDate().toISOString().slice(0, 10);
+      apps.push(result);
+    }
+    if (i < threads.length - 1) Utilities.sleep(REQUEST_DELAY_MS);
+  }
+  if (quotaHit) Logger.log('Stopped early: Gemini quota exhausted.');
 
   if (apps.length === 0) {
     Logger.log('Nothing to upsert.');
@@ -128,8 +137,12 @@ function extractWithGemini(apiKey, msg) {
     payload: JSON.stringify(payload),
     muteHttpExceptions: true,
   });
+  if (res.getResponseCode() === 429) {
+    Logger.log('Gemini quota hit (429) — stopping run.');
+    return 'QUOTA';
+  }
   if (res.getResponseCode() >= 300) {
-    Logger.log('Gemini error ' + res.getResponseCode() + ': ' + res.getContentText());
+    Logger.log('Gemini error ' + res.getResponseCode() + ': ' + res.getContentText().slice(0, 300));
     return null;
   }
   const json = JSON.parse(res.getContentText());
