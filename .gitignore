@@ -8,6 +8,9 @@
 *.swp
 *~
 
+# Personal working notes (not part of the project record)
+AWS_CLEANUP_TODO.md
+
 # Environment files (anywhere in the tree)
 .env
 .env.*
