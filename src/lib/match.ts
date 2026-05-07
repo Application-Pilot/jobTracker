@@ -63,3 +63,42 @@ export function findSimilarOpen(
     .sort((a, b) => b.score - a.score)
     .slice(0, 5);
 }
+
+export function normalizeCompany(name: string): string {
+  return (name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+export function companiesMatch(a: string, b: string): boolean {
+  const na = normalizeCompany(a);
+  const nb = normalizeCompany(b);
+  if (!na || !nb) return false;
+  return na.includes(nb) || nb.includes(na);
+}
+
+export function pickRejectionTarget(
+  incoming: { company: string; jobTitle?: string },
+  existing: Application[],
+): Application | null {
+  const candidates = existing.filter((a) =>
+    companiesMatch(a.company, incoming.company),
+  );
+  if (candidates.length === 0) return null;
+  if (candidates.length === 1) return candidates[0];
+
+  const titleA = tokens(incoming.jobTitle || "");
+  if (titleA.size > 0) {
+    const scored = candidates
+      .map((a) => ({ a, s: jaccard(titleA, tokens(a.jobTitle)) }))
+      .sort((x, y) => y.s - x.s);
+    if (scored[0].s >= 0.4 && (scored.length === 1 || scored[0].s > scored[1].s)) {
+      return scored[0].a;
+    }
+  }
+
+  return [...candidates].sort((a, b) => {
+    const da = a.appliedDate || a.emailDate || "";
+    const db = b.appliedDate || b.emailDate || "";
+    if (da !== db) return db.localeCompare(da);
+    return (b.id || "").localeCompare(a.id || "");
+  })[0];
+}

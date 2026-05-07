@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s https://jobtracker-456882757436.us-central1.run.app/api/sync)",
+      "Bash(gcloud run *)",
+      "Bash(./CREATE_SCHEDULER.sh)",
+      "Bash(gcloud services *)",
+      "Bash(gcloud logging *)"
+    ]
+  }
+}

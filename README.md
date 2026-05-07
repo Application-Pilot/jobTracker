@@ -1,154 +1,212 @@
 # Job Application Tracker
 
-A personal dashboard that tracks job applications. Gmail messages are parsed
-by Gemini in a Google Apps Script, written to a Google Sheet, and surfaced in
-a Next.js dashboard with status filters, search, sort, manual entry/edit, and
-"similar still-open roles" suggestions on rejected applications.
+Jobtracker is a Next.js dashboard backed by Google Sheets. Job-related Gmail messages are read through the Gmail API, parsed by Gemini, written into the `Applications` sheet tab, and displayed in the dashboard.
 
-```
-Gmail → Apps Script (Gemini extraction) → /api/applications/upsert → Google Sheet
-                                                                       ↓
-                                                                Next.js Dashboard
+```text
+Cloud Scheduler -> POST /api/sync -> /api/applications/upsert -> Google Sheet <-> Next.js Dashboard
 ```
 
-## What lives where
+Legacy Google Apps Script sync is deprecated and intentionally disabled. The file in `apps-script/Code.gs` is only a stub so nobody accidentally sets up the old flow.
 
-- `src/app/Dashboard.tsx` — the dashboard UI (client component).
-- `src/app/api/applications/*` — REST endpoints over the Sheet.
-- `src/lib/sheets.ts` — service-account-auth Google Sheets v4 client.
-- `src/lib/types.ts` — schema + sheet header order.
-- `src/lib/match.ts` — rejection similarity scoring.
-- `apps-script/` — paste these into a Google Apps Script project bound to
-  your Sheet. Handles Gmail reading + Gemini extraction + daily trigger.
+## What Lives Where
 
-## One-time setup
+- `src/app/Dashboard.tsx` — dashboard UI
+- `src/app/api/applications/*` — CRUD API over the sheet
+- `src/app/api/applications/upsert/route.ts` — idempotent sync write endpoint
+- `src/app/api/sync/route.ts` — scheduled Gmail -> Gemini -> upsert sync
+- `src/app/api/bulk-sync/route.ts` — local-only historical backfill
+- `src/lib/sheets.ts` — Google Sheets client
+- `src/lib/types.ts` — application schema and sheet column order
+- `deploy.sh` — deploys the app to Cloud Run
+- `CREATE_SCHEDULER.sh` — creates the Cloud Scheduler job that hits `/api/sync`
 
-### 1. Create the Google Sheet
+## Local Setup
 
-1. Create a new Google Sheet named **Job Applications**.
-2. Rename the first tab to `Applications` (case-sensitive).
-3. Copy the spreadsheet ID from the URL — it's the part between `/d/` and
-   `/edit`. You'll use this as `GOOGLE_SHEETS_ID`.
+### 1. Create the Sheet
 
-The dashboard auto-creates the header row on first load, so you don't need
-to populate columns manually.
+1. Create a Google Sheet named **Job Applications**.
+2. Rename the first tab to `Applications`.
+3. Copy the spreadsheet ID from the URL and use it as `GOOGLE_SHEETS_ID`.
 
-### 2. Create a Google Cloud project + service account
+The app creates the header row automatically on first load.
 
-1. Go to <https://console.cloud.google.com>, create a new project (e.g. "jobtracker").
-2. **APIs & Services → Library**, enable **Google Sheets API**.
-3. **APIs & Services → Credentials → Create credentials → Service account**.
-   Name it anything (e.g. `jobtracker-sheets`). Skip the optional steps.
-4. Open the service account, **Keys → Add key → Create new key → JSON**.
-   A `.json` file downloads. Keep it secret.
-5. Open your Sheet, click **Share**, and share it with the service
-   account's email (`...iam.gserviceaccount.com`) as **Editor**.
+### 2. Create a Google Cloud Project and Service Account
 
-### 3. Configure environment variables
+1. Create a Google Cloud project.
+2. Enable the **Google Sheets API**.
+3. Create a service account.
+4. Generate a JSON key for that service account.
+5. Share the Google Sheet with the service account email as **Editor**.
 
-Copy `.env.example` to `.env.local` and fill it in:
+### 3. Configure `.env.local`
 
-```
-GOOGLE_SHEETS_ID=...                       # from step 1
-GOOGLE_SERVICE_ACCOUNT_EMAIL=...           # client_email from the JSON
-GOOGLE_SERVICE_ACCOUNT_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
-SYNC_SHARED_SECRET=                        # optional, any random string
-```
-
-For the private key, paste the entire `private_key` value from the JSON —
-keep it as one line with literal `\n` escapes, wrapped in double quotes.
-
-### 4. Run the dashboard
+Copy `.env.example` to `.env.local` and fill in:
 
 ```bash
+GOOGLE_SHEETS_ID=...
+GOOGLE_SERVICE_ACCOUNT_EMAIL=...
+GOOGLE_SERVICE_ACCOUNT_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+GEMINI_API_KEY=...
+GMAIL_REFRESH_TOKEN=...
+GMAIL_CLIENT_ID=...
+GMAIL_CLIENT_SECRET=...
+DASHBOARD_BASE_URL=http://localhost:3000
+SYNC_SHARED_SECRET=
+```
+
+Notes:
+
+- `GOOGLE_SERVICE_ACCOUNT_KEY` should stay on one line with literal `\n` separators.
+- `DASHBOARD_BASE_URL` is mainly for local sync tooling.
+- `SYNC_SHARED_SECRET` is optional, but recommended for Cloud Run + Scheduler.
+
+### 4. Run Locally
+
+```bash
+npm install
 npm run dev
 ```
 
-Open <http://localhost:3000>. You should see an empty dashboard. Click **+ Add**
-to make sure write access works — it will land in your Sheet immediately.
+Open <http://localhost:3000>. Manual adds and edits should appear in the sheet immediately.
 
-### 5. Set up the Gmail → Sheet automation
+## Sync Modes
 
-1. Open your Sheet, **Extensions → Apps Script**.
-2. Delete the default `Code.gs` and paste the contents of
-   [apps-script/Code.gs](apps-script/Code.gs).
-3. In the Apps Script editor, click the gear (Project Settings), check
-   **Show "appsscript.json" manifest**, then replace its contents with
-   [apps-script/appsscript.json](apps-script/appsscript.json).
-4. **Project Settings → Script properties → Add script property** for each:
-   - `GEMINI_API_KEY` — your Gemini API key (rotate if it has been shared in chat).
-   - `DASHBOARD_BASE_URL` — `https://your-app.vercel.app` (or your dev tunnel for testing).
-   - `SYNC_SHARED_SECRET` — same value as the dashboard's env var (optional but recommended in prod).
-   - `LOOKBACK_DAYS` — defaults to `14`.
-5. Run the function `syncNow` once. Authorize Gmail + external requests when prompted.
-   Check **Executions** for logs.
-6. Run `installDailyTrigger` once to schedule the 9am sync.
+### Scheduled Sync
 
-The upsert endpoint deduplicates by `emailSubject + emailDate`, so re-running
-`syncNow` won't create duplicates.
+This is the supported production sync path.
 
-## Deploy to Google Cloud Run (cheap, scales to zero)
+1. Cloud Scheduler sends `POST` to your deployed `/api/sync`.
+2. `/api/sync` searches Gmail for recent job-related threads.
+3. It reads the latest message in each thread.
+4. It sends the message text to Gemini for extraction.
+5. It posts extracted applications to `/api/applications/upsert`.
+6. `/api/applications/upsert` updates or appends rows in Google Sheets.
+7. The dashboard picks up changes on refresh or within 30 seconds from polling.
 
-Cloud Run scales to zero when nobody's hitting it, so a personal tracker
-typically costs **$0/month** under the free tier (2M requests, 360k GB-s,
-180k vCPU-s per month).
+Scheduled sync now keeps a small cursor/state record in a `SyncState` sheet tab so it can:
 
-### Prereqs
+- skip already-imported `gmailThreadId`s
+- page through Gmail results across runs instead of always restarting at the first page
+- remember the last processed thread metadata between runs
 
-- Install gcloud: <https://cloud.google.com/sdk/docs/install>
-- `gcloud auth login`
-- A billing account attached to your project (free tier still requires one)
-- Python 3 (used by `deploy.sh` to extract the key from `cred.json`)
+### Bulk Sync
 
-### Deploy
+`/api/bulk-sync` is a local-only backfill tool for historical mail. It is useful for importing old data, but it does not prove the deployed scheduler path is healthy.
+
+If bulk sync works locally and the scheduler still does not update jobs later, the issue is usually:
+
+- Cloud Run missing Gmail OAuth env vars
+- `SYNC_SHARED_SECRET` mismatch
+- Cloud Scheduler job not created or not running
+- Cloud Run logs showing `/api/sync` failures
+
+## Deploy to Cloud Run
+
+### What `deploy.sh` Does
+
+Run:
 
 ```bash
 ./deploy.sh
 ```
 
-The script will:
-1. Enable Cloud Run, Cloud Build, Artifact Registry, Secret Manager APIs
-2. Upload your service account private key to **Secret Manager**
-   (read straight from `cred.json`, never stored as a plain env var)
-3. Grant the Cloud Run runtime SA permission to read that secret
-4. Build the container with Cloud Build (no local Docker required)
-5. Deploy to Cloud Run with `min-instances=0`, `max-instances=2`, 512Mi
-6. Print the public URL
+This script does all of the following:
 
-Override defaults with env vars:
+1. Reads env vars from `.env.local`.
+2. Reads the service account private key from `cred.json`.
+3. Creates or updates a Secret Manager secret for `GOOGLE_SERVICE_ACCOUNT_KEY`.
+4. Enables required Google Cloud APIs.
+5. Deploys the app to Cloud Run.
+6. Passes runtime env vars to Cloud Run, including Gmail OAuth values needed by `/api/sync`.
+7. Prints the deployed Cloud Run URL.
+
+Important:
+
+- `./deploy.sh` does **not** invoke the scheduler.
+- `./deploy.sh` does **not** create the cron job.
+- It only deploys the app that the scheduler will call later.
+
+## Create the Scheduler
+
+### What `CREATE_SCHEDULER.sh` Does
+
+Run:
 
 ```bash
-PROJECT_ID=my-other-project REGION=us-east1 ./deploy.sh
+./CREATE_SCHEDULER.sh
 ```
 
-Use the printed URL as `DASHBOARD_BASE_URL` in the Apps Script properties.
+This script:
 
-### Iterate
+1. Looks up your deployed Cloud Run URL using `gcloud run services describe`.
+2. Reads `SYNC_SHARED_SECRET` from `.env.local`.
+3. Deletes the old `jobtracker-sync` scheduler job if it exists.
+4. Recreates it as an HTTP job.
+5. Configures the schedule as `*/15 * * * *`, which means every 15 minutes.
+6. Configures the job to call `POST <cloud-run-url>/api/sync`.
+7. Adds the `X-Sync-Secret: <SYNC_SHARED_SECRET>` header and an OIDC identity token.
 
-Re-running `./deploy.sh` after code changes does a fresh build + zero-downtime
-rollout. If you only changed env vars or rotated the service account key
-(updating `cred.json`), the script handles that too — it'll add a new secret
-version.
+That means the scheduler is invoked by Google Cloud itself, not by your Next.js app.
 
-## Useful behaviors
+After the job is created, Google Cloud Scheduler runs it automatically every 15 minutes. You can also trigger it manually:
 
-- **Auto-refresh:** dashboard polls the API every 30 seconds.
-- **Filters:** the count cards at the top double as filter buttons.
-- **Quick status:** every card has one-click `→ pending / interview / accepted / rejected` buttons.
-- **Rejection matching:** when a card is rejected, the dashboard shows up
-  to 5 still-open applications with similar titles, same company, or same
-  location.
-- **CSV export:** "Export CSV" button downloads the current full dataset.
+```bash
+gcloud scheduler jobs run jobtracker-sync --location=us-central1
+```
+
+## How the Scheduler Is Actually Invoked
+
+This is the exact lifecycle:
+
+1. You run `./deploy.sh`.
+2. Cloud Run gets the latest version of your app.
+3. You run `./CREATE_SCHEDULER.sh`.
+4. That creates a Google Cloud Scheduler job in your GCP project.
+5. Every 15 minutes, Google Cloud Scheduler makes an HTTP `POST` request to your Cloud Run service at `/api/sync`.
+6. Your app handles that request and runs the Gmail sync logic.
+
+So if you only ran `./deploy.sh`, the app was deployed, but nothing new was scheduled unless a scheduler job already existed.
+
+## Verify the Scheduler
+
+### Recreate It
+
+```bash
+./CREATE_SCHEDULER.sh
+```
+
+### Manually Trigger It
+
+```bash
+gcloud scheduler jobs run jobtracker-sync --location=us-central1
+```
+
+### Inspect Logs
+
+```bash
+gcloud run logs read jobtracker --limit 100 --region=us-central1
+```
+
+You should see `/api/sync` logs such as:
+
+- `Sync request authorized`
+- `Starting sync...`
+- `Searching Gmail...`
+- `Extracted N applications`
+- `Upsert response: 200 ...`
+
+## Useful Behaviors
+
+- Dashboard auto-refreshes every 30 seconds
+- Manual add/edit writes directly to the sheet
+- Upsert deduplicates by `gmailThreadId` first, then `emailSubject + emailDate`
+- Rejected jobs can surface similar open roles
+- CSV export downloads the current dataset
 
 ## Troubleshooting
 
-- **"Missing GOOGLE_SHEETS_ID"** etc. — your `.env.local` isn't being read.
-  Restart `npm run dev` after editing it.
-- **403 from Sheets API** — you didn't share the Sheet with the service
-  account email, or the tab isn't named `Applications`.
-- **Apps Script can't reach the dashboard** — `DASHBOARD_BASE_URL` must be
-  publicly reachable. `localhost` won't work; use a Vercel preview or a
-  tunnel like `cloudflared`.
-- **Gemini returns nothing useful** — the prompt asks the model to return
-  `SKIP` for non-job emails. Check the Apps Script execution log to see
-  what it returned.
+- If `/api/sync` says `Missing GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, or GMAIL_CLIENT_SECRET`, Cloud Run does not have the Gmail OAuth env vars.
+- If scheduler requests get `401 Unauthorized`, `SYNC_SHARED_SECRET` in Cloud Scheduler and Cloud Run do not match, or the job was created before the `X-Sync-Secret` fix.
+- If local bulk sync works but scheduled sync does not, the deployed environment is misconfigured, not the sheet write path.
+- If the dashboard looks stale, wait up to 30 seconds or click **Refresh**.
+- If `DASHBOARD_BASE_URL` in production points to `localhost`, that value is wrong for Cloud Run.

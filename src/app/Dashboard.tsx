@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Application, STATUSES, Status } from "@/lib/types";
+import { Application, STATUSES, Status, localDateString } from "@/lib/types";
 import { findSimilarOpen } from "@/lib/match";
 
 type SortKey = "newest" | "oldest" | "company" | "status";
@@ -17,7 +17,7 @@ function emptyDraft(): Partial<Application> {
   return {
     jobTitle: "",
     company: "",
-    appliedDate: new Date().toISOString().slice(0, 10),
+    appliedDate: localDateString(),
     status: "pending",
     interviewDate: "",
     rejectionReason: "",
@@ -25,6 +25,8 @@ function emptyDraft(): Partial<Application> {
     salaryRange: "",
     location: "",
     notes: "",
+    easyApply: "",
+    gmailThreadId: "",
   };
 }
 
@@ -148,6 +150,8 @@ export default function Dashboard() {
       "salaryRange",
       "location",
       "notes",
+      "easyApply",
+      "gmailThreadId",
     ] as const;
     const rows = [headers.join(",")];
     for (const a of apps) {
@@ -161,7 +165,7 @@ export default function Dashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `jobtracker-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.download = `jobtracker-${localDateString()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -218,6 +222,8 @@ export default function Dashboard() {
             />
           ))}
         </section>
+
+        <DailyChart apps={apps} />
 
         <section className="mb-4 flex flex-wrap items-center gap-2">
           <input
@@ -304,6 +310,178 @@ function StatCard({
   );
 }
 
+type DayBucket = {
+  date: string;
+  label: string;
+  easy: number;
+  regular: number;
+};
+
+function DailyChart({ apps }: { apps: Application[] }) {
+  const series = useMemo<DayBucket[]>(() => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let minDate: Date | null = null;
+    let maxDate = today;
+    for (const a of apps) {
+      const key = (a.appliedDate || a.emailDate || "").slice(0, 10);
+      if (!key) continue;
+      const d = new Date(key + "T00:00:00");
+      if (isNaN(d.getTime())) continue;
+      if (!minDate || d < minDate) minDate = d;
+      if (d > maxDate) maxDate = d;
+    }
+    if (!minDate) return [];
+    const start = minDate;
+
+    const days: DayBucket[] = [];
+    for (let d = new Date(start); d <= maxDate; d.setDate(d.getDate() + 1)) {
+      days.push({
+        date: localDateString(d),
+        label: `${d.getMonth() + 1}/${d.getDate()}`,
+        easy: 0,
+        regular: 0,
+      });
+    }
+    const byDate = new Map(days.map((d) => [d.date, d]));
+    for (const a of apps) {
+      const key = (a.appliedDate || a.emailDate || "").slice(0, 10);
+      const bucket = byDate.get(key);
+      if (!bucket) continue;
+      if (a.easyApply === "true") bucket.easy++;
+      else bucket.regular++;
+    }
+    return days;
+  }, [apps]);
+
+  if (series.length === 0) return null;
+
+  const max = Math.max(1, ...series.map((d) => d.easy + d.regular));
+  const totalEasy = series.reduce((s, d) => s + d.easy, 0);
+  const totalRegular = series.reduce((s, d) => s + d.regular, 0);
+  const total = totalEasy + totalRegular;
+  const width = 800;
+  const height = 160;
+  const padL = 32;
+  const padR = 12;
+  const padT = 12;
+  const padB = 24;
+  const innerW = width - padL - padR;
+  const innerH = height - padT - padB;
+  const barW = innerW / series.length;
+  const showLabelEvery = Math.max(1, Math.ceil(series.length / 14));
+
+  return (
+    <section className="mb-6 rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+      <div className="mb-2 flex items-baseline justify-between">
+        <h2 className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Applications per day
+        </h2>
+        <span className="text-xs text-zinc-500">
+          {total} total · since {series[0]?.date ?? "—"}
+        </span>
+      </div>
+      <div className="mb-2 flex items-center gap-4 text-xs text-zinc-600 dark:text-zinc-400">
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-indigo-500 dark:bg-indigo-400" />
+          Manual / direct ({totalRegular})
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm bg-amber-500 dark:bg-amber-400" />
+          LinkedIn Easy Apply ({totalEasy})
+        </span>
+      </div>
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className="h-40 w-full"
+        preserveAspectRatio="none"
+      >
+        <line
+          x1={padL}
+          y1={padT + innerH}
+          x2={padL + innerW}
+          y2={padT + innerH}
+          className="stroke-zinc-300 dark:stroke-zinc-700"
+          strokeWidth={1}
+        />
+        <text
+          x={padL - 6}
+          y={padT + 4}
+          textAnchor="end"
+          className="fill-zinc-500 text-[10px]"
+        >
+          {max}
+        </text>
+        <text
+          x={padL - 6}
+          y={padT + innerH}
+          textAnchor="end"
+          className="fill-zinc-500 text-[10px]"
+        >
+          0
+        </text>
+        {series.map((d, i) => {
+          const dayTotal = d.easy + d.regular;
+          const x = padL + i * barW;
+          const w = Math.max(1, barW - 2);
+          const regularH = (d.regular / max) * innerH;
+          const easyH = (d.easy / max) * innerH;
+          const regularY = padT + innerH - regularH;
+          const easyY = regularY - easyH;
+          const totalTopY = padT + innerH - regularH - easyH;
+          return (
+            <g key={d.date}>
+              {d.regular > 0 && (
+                <rect
+                  x={x + 1}
+                  y={regularY}
+                  width={w}
+                  height={regularH}
+                  className="fill-indigo-500 dark:fill-indigo-400"
+                >
+                  <title>{`${d.date} · Manual: ${d.regular}`}</title>
+                </rect>
+              )}
+              {d.easy > 0 && (
+                <rect
+                  x={x + 1}
+                  y={easyY}
+                  width={w}
+                  height={easyH}
+                  className="fill-amber-500 dark:fill-amber-400"
+                >
+                  <title>{`${d.date} · Easy Apply: ${d.easy}`}</title>
+                </rect>
+              )}
+              {dayTotal > 0 && (
+                <text
+                  x={x + barW / 2}
+                  y={totalTopY - 2}
+                  textAnchor="middle"
+                  className="fill-zinc-600 text-[9px] dark:fill-zinc-400"
+                >
+                  {dayTotal}
+                </text>
+              )}
+              {i % showLabelEvery === 0 && (
+                <text
+                  x={x + barW / 2}
+                  y={padT + innerH + 14}
+                  textAnchor="middle"
+                  className="fill-zinc-500 text-[10px]"
+                >
+                  {d.label}
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
+    </section>
+  );
+}
+
 function Card({
   app,
   allApps,
@@ -326,7 +504,14 @@ function Card({
     <article className="rounded-lg border border-zinc-200 bg-white p-4 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold">{app.jobTitle}</h3>
+          <h3 className="flex items-center gap-2 truncate text-base font-semibold">
+            <span className="truncate">{app.jobTitle}</span>
+            {app.easyApply === "true" && (
+              <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-950 dark:text-amber-200 dark:ring-amber-900">
+                Easy Apply
+              </span>
+            )}
+          </h3>
           <p className="truncate text-sm text-zinc-600 dark:text-zinc-400">
             {app.company}
             {app.location ? ` · ${app.location}` : ""}

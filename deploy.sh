@@ -21,17 +21,29 @@ REGION="${REGION:-us-central1}"
 SERVICE="${SERVICE:-jobtracker}"
 SECRET_NAME="${SECRET_NAME:-google-service-account-key}"
 
-# Pull all required env vars from .env.local
 if [[ ! -f .env.local ]]; then
   echo "Missing .env.local — create it first (see README)." >&2
   exit 1
 fi
 
-GOOGLE_SHEETS_ID="$(grep -E '^GOOGLE_SHEETS_ID=' .env.local | cut -d= -f2-)"
-GOOGLE_SERVICE_ACCOUNT_EMAIL="$(grep -E '^GOOGLE_SERVICE_ACCOUNT_EMAIL=' .env.local | cut -d= -f2-)"
-SYNC_SHARED_SECRET="$(grep -E '^SYNC_SHARED_SECRET=' .env.local | cut -d= -f2- || true)"
-GEMINI_API_KEY="$(grep -E '^GEMINI_API_KEY=' .env.local | cut -d= -f2- || true)"
-DASHBOARD_BASE_URL="$(grep -E '^DASHBOARD_BASE_URL=' .env.local | cut -d= -f2- || true)"
+# Load env vars exactly as the app sees them, including quoted values.
+set -a
+. ./.env.local
+set +a
+
+GOOGLE_SHEETS_ID="${GOOGLE_SHEETS_ID:-}"
+GOOGLE_SERVICE_ACCOUNT_EMAIL="${GOOGLE_SERVICE_ACCOUNT_EMAIL:-}"
+SYNC_SHARED_SECRET="${SYNC_SHARED_SECRET:-}"
+GEMINI_API_KEY="${GEMINI_API_KEY:-}"
+DASHBOARD_BASE_URL="${DASHBOARD_BASE_URL:-}"
+GMAIL_REFRESH_TOKEN="${GMAIL_REFRESH_TOKEN:-}"
+GMAIL_CLIENT_ID="${GMAIL_CLIENT_ID:-}"
+GMAIL_CLIENT_SECRET="${GMAIL_CLIENT_SECRET:-}"
+
+if [[ -z "$GOOGLE_SHEETS_ID" || -z "$GOOGLE_SERVICE_ACCOUNT_EMAIL" ]]; then
+  echo "Missing GOOGLE_SHEETS_ID or GOOGLE_SERVICE_ACCOUNT_EMAIL in .env.local." >&2
+  exit 1
+fi
 
 if [[ ! -f cred.json ]]; then
   echo "Missing cred.json (service account JSON)." >&2
@@ -47,7 +59,8 @@ gcloud services enable \
   run.googleapis.com \
   cloudbuild.googleapis.com \
   artifactregistry.googleapis.com \
-  secretmanager.googleapis.com >/dev/null
+  secretmanager.googleapis.com \
+  cloudscheduler.googleapis.com >/dev/null
 
 # Extract the private_key from cred.json — that's what we store as a secret.
 PRIVATE_KEY="$(python3 -c 'import json,sys; print(json.load(open("cred.json"))["private_key"], end="")')"
@@ -74,8 +87,21 @@ fi
 if [[ -n "$GEMINI_API_KEY" ]]; then
   ENV_VARS="${ENV_VARS},GEMINI_API_KEY=${GEMINI_API_KEY}"
 fi
-if [[ -n "$DASHBOARD_BASE_URL" ]]; then
+if [[ -n "$GMAIL_REFRESH_TOKEN" ]]; then
+  ENV_VARS="${ENV_VARS},GMAIL_REFRESH_TOKEN=${GMAIL_REFRESH_TOKEN}"
+fi
+if [[ -n "$GMAIL_CLIENT_ID" ]]; then
+  ENV_VARS="${ENV_VARS},GMAIL_CLIENT_ID=${GMAIL_CLIENT_ID}"
+fi
+if [[ -n "$GMAIL_CLIENT_SECRET" ]]; then
+  ENV_VARS="${ENV_VARS},GMAIL_CLIENT_SECRET=${GMAIL_CLIENT_SECRET}"
+fi
+if [[ -n "$DASHBOARD_BASE_URL" ]] && [[ ! "$DASHBOARD_BASE_URL" =~ ^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?/?$ ]]; then
   ENV_VARS="${ENV_VARS},DASHBOARD_BASE_URL=${DASHBOARD_BASE_URL}"
+fi
+
+if [[ -n "$DASHBOARD_BASE_URL" ]] && [[ "$DASHBOARD_BASE_URL" =~ ^https?://(localhost|127\.0\.0\.1)(:[0-9]+)?/?$ ]]; then
+  echo "▶ Skipping local DASHBOARD_BASE_URL for Cloud Run; /api/sync will use the incoming request origin."
 fi
 
 echo "▶ Building + deploying (this takes 2-4 min)..."

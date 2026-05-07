@@ -7,10 +7,10 @@
  *   node sync-worker.js
  *
  * Environment variables:
- *   GOOGLE_SERVICE_ACCOUNT_EMAIL
- *   GOOGLE_SERVICE_ACCOUNT_KEY (PEM format, can include literal \n)
- *   GOOGLE_SHEETS_ID
  *   GEMINI_API_KEY
+ *   GMAIL_REFRESH_TOKEN
+ *   GMAIL_CLIENT_ID
+ *   GMAIL_CLIENT_SECRET
  *   DASHBOARD_BASE_URL
  *   SYNC_SHARED_SECRET (optional)
  */
@@ -45,30 +45,25 @@ async function sleep(ms) {
 }
 
 async function getGmailClient() {
-  const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const key = process.env.GOOGLE_SERVICE_ACCOUNT_KEY;
+  const refreshToken = process.env.GMAIL_REFRESH_TOKEN;
+  const clientId = process.env.GMAIL_CLIENT_ID;
+  const clientSecret = process.env.GMAIL_CLIENT_SECRET;
 
-  if (!email || !key) {
-    throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_EMAIL or GOOGLE_SERVICE_ACCOUNT_KEY');
+  if (!refreshToken || !clientId || !clientSecret) {
+    throw new Error('Missing GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, or GMAIL_CLIENT_SECRET');
   }
 
-  const keyObj = {
-    type: 'service_account',
-    project_id: email.split('@')[1].split('.')[0],
-    private_key_id: 'key1',
-    private_key: key.replace(/\\n/g, '\n'),
-    client_email: email,
-    client_id: '1',
-    auth_uri: 'https://accounts.google.com/o/oauth2/auth',
-    token_uri: 'https://oauth2.googleapis.com/token',
-  };
+  const oauth2Client = new google.auth.OAuth2(
+    clientId,
+    clientSecret,
+    'http://localhost:3000/auth/callback'
+  );
 
-  const auth = new google.auth.GoogleAuth({
-    credentials: keyObj,
-    scopes: ['https://www.googleapis.com/auth/gmail.readonly'],
+  oauth2Client.setCredentials({
+    refresh_token: refreshToken,
   });
 
-  return google.gmail({ version: 'v1', auth });
+  return google.gmail({ version: 'v1', auth: oauth2Client });
 }
 
 async function getGmailThreads() {
@@ -193,11 +188,15 @@ async function main() {
   if (!process.env.GEMINI_API_KEY) {
     throw new Error('Missing GEMINI_API_KEY');
   }
-  if (!process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL) {
-    throw new Error('Missing GOOGLE_SERVICE_ACCOUNT_EMAIL');
-  }
   if (!process.env.DASHBOARD_BASE_URL) {
     throw new Error('Missing DASHBOARD_BASE_URL');
+  }
+  if (
+    !process.env.GMAIL_REFRESH_TOKEN ||
+    !process.env.GMAIL_CLIENT_ID ||
+    !process.env.GMAIL_CLIENT_SECRET
+  ) {
+    throw new Error('Missing GMAIL_REFRESH_TOKEN, GMAIL_CLIENT_ID, or GMAIL_CLIENT_SECRET');
   }
 
   const startTime = Date.now();

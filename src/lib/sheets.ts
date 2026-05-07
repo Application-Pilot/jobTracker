@@ -9,6 +9,8 @@ import {
 } from "./types";
 
 let cachedClient: sheets_v4.Sheets | null = null;
+const SYNC_STATE_SHEET_NAME = "SyncState";
+const SYNC_STATE_HEADERS = ["key", "value", "updatedAt"] as const;
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -39,22 +41,121 @@ function client() {
   return cachedClient;
 }
 
+async function ensureSheetTab(title: string) {
+  const sheets = client();
+  const spreadsheetId = getSheetId();
+  const meta = await sheets.spreadsheets.get({ spreadsheetId });
+  const exists = meta.data.sheets?.some((s) => s.properties?.title === title);
+  if (exists) return;
+  await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [{ addSheet: { properties: { title } } }],
+    },
+  });
+}
+
 export async function ensureHeaderRow() {
   const sheets = client();
   const spreadsheetId = getSheetId();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_NAME}!A1:M1`,
+    range: `${SHEET_NAME}!A1:O1`,
   });
   const existing = res.data.values?.[0] ?? [];
-  if (existing.length === 0) {
+  const expected = SHEET_HEADERS as string[];
+  const matches =
+    existing.length === expected.length &&
+    expected.every((h, i) => existing[i] === h);
+  if (!matches) {
     await sheets.spreadsheets.values.update({
       spreadsheetId,
-      range: `${SHEET_NAME}!A1:M1`,
+      range: `${SHEET_NAME}!A1:O1`,
       valueInputOption: "RAW",
-      requestBody: { values: [SHEET_HEADERS as string[]] },
+      requestBody: { values: [expected] },
     });
   }
+}
+
+export async function ensureSyncStateSheet() {
+  await ensureSheetTab(SYNC_STATE_SHEET_NAME);
+
+  const sheets = client();
+  const spreadsheetId = getSheetId();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SYNC_STATE_SHEET_NAME}!A1:C1`,
+  });
+  const existing = res.data.values?.[0] ?? [];
+  const expected = [...SYNC_STATE_HEADERS];
+  const matches =
+    existing.length === expected.length &&
+    expected.every((h, i) => existing[i] === h);
+  if (!matches) {
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${SYNC_STATE_SHEET_NAME}!A1:C1`,
+      valueInputOption: "RAW",
+      requestBody: { values: [expected] },
+    });
+  }
+}
+
+export async function readJsonState<T>(key: string, fallback: T): Promise<T> {
+  await ensureSyncStateSheet();
+
+  const sheets = client();
+  const spreadsheetId = getSheetId();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SYNC_STATE_SHEET_NAME}!A:C`,
+  });
+  const rows = res.data.values ?? [];
+  for (const row of rows.slice(1)) {
+    if (row[0] !== key) continue;
+    const raw = row[1];
+    if (!raw) return fallback;
+    try {
+      return JSON.parse(raw) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return fallback;
+}
+
+export async function writeJsonState<T>(key: string, value: T): Promise<void> {
+  await ensureSyncStateSheet();
+
+  const sheets = client();
+  const spreadsheetId = getSheetId();
+  const res = await sheets.spreadsheets.values.get({
+    spreadsheetId,
+    range: `${SYNC_STATE_SHEET_NAME}!A:C`,
+  });
+  const rows = res.data.values ?? [];
+  const payload = JSON.stringify(value);
+  const updatedAt = new Date().toISOString();
+  const rowIndex = rows.findIndex((row) => row[0] === key);
+
+  if (rowIndex >= 1) {
+    const sheetRow = rowIndex + 1;
+    await sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `${SYNC_STATE_SHEET_NAME}!A${sheetRow}:C${sheetRow}`,
+      valueInputOption: "RAW",
+      requestBody: { values: [[key, payload, updatedAt]] },
+    });
+    return;
+  }
+
+  await sheets.spreadsheets.values.append({
+    spreadsheetId,
+    range: `${SYNC_STATE_SHEET_NAME}!A:C`,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: [[key, payload, updatedAt]] },
+  });
 }
 
 export async function listApplications(): Promise<Application[]> {
@@ -92,7 +193,7 @@ export async function updateApplication(app: Application): Promise<void> {
   const sheetRow = rowIndex + 1;
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: `${SHEET_NAME}!A${sheetRow}:M${sheetRow}`,
+    range: `${SHEET_NAME}!A${sheetRow}:O${sheetRow}`,
     valueInputOption: "RAW",
     requestBody: { values: [applicationToRow(app)] },
   });

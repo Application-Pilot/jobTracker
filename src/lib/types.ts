@@ -15,6 +15,8 @@ export type Application = {
   salaryRange: string;
   location: string;
   notes: string;
+  easyApply: string;
+  gmailThreadId: string;
 };
 
 export const SHEET_HEADERS: (keyof Application)[] = [
@@ -31,9 +33,11 @@ export const SHEET_HEADERS: (keyof Application)[] = [
   "salaryRange",
   "location",
   "notes",
+  "easyApply",
+  "gmailThreadId",
 ];
 
-export const SHEET_RANGE = "Applications!A:M";
+export const SHEET_RANGE = "Applications!A:O";
 export const SHEET_NAME = "Applications";
 
 export function rowToApplication(row: string[]): Application {
@@ -52,9 +56,21 @@ export function rowToApplication(row: string[]): Application {
     salaryRange: get(10),
     location: get(11),
     notes: get(12),
+    easyApply: get(13),
+    gmailThreadId: get(14),
   };
 }
 
 export function applicationToRow(a: Application): string[] {
   return SHEET_HEADERS.map((k) => a[k] ?? "");
+}
+
+// Returns YYYY-MM-DD in the runtime's local timezone. Avoids the UTC drift
+// that bit us when sync ran in the evening Pacific time and stamped rows with
+// the next day's date.
+export function localDateString(d: Date = new Date()): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }

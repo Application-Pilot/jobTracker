@@ -6,7 +6,8 @@ import {
   newId,
   updateApplication,
 } from "@/lib/sheets";
-import { Application, STATUSES, Status } from "@/lib/types";
+import { Application, STATUSES, Status, localDateString } from "@/lib/types";
+import { pickRejectionTarget } from "@/lib/match";
 
 export const dynamic = "force-dynamic";
 
@@ -28,24 +29,64 @@ export async function POST(req: NextRequest) {
     }
     await ensureHeaderRow();
     const existing = await listApplications();
-    const byKey = new Map<string, Application>();
+    const byThreadId = new Map<string, Application>();
+    const bySubjectDate = new Map<string, Application>();
     for (const a of existing) {
-      const key = `${a.emailSubject}|${a.emailDate}`.toLowerCase();
-      if (a.emailSubject) byKey.set(key, a);
+      if (a.gmailThreadId) byThreadId.set(a.gmailThreadId, a);
+      if (a.emailSubject) {
+        bySubjectDate.set(`${a.emailSubject}|${a.emailDate}`.toLowerCase(), a);
+      }
     }
     let inserted = 0;
     let updated = 0;
     let skipped = 0;
     for (const incoming of body.applications) {
+      const status: Status = STATUSES.includes(incoming.status as Status)
+        ? (incoming.status as Status)
+        : "pending";
+
+      if (status === "rejected") {
+        if (!incoming.company) {
+          skipped++;
+          continue;
+        }
+        const target = pickRejectionTarget(
+          { company: incoming.company, jobTitle: incoming.jobTitle },
+          existing,
+        );
+        if (!target) {
+          skipped++;
+          continue;
+        }
+        const merged: Application = {
+          ...target,
+          ...incoming,
+          id: target.id,
+          status: "rejected",
+          jobTitle: target.jobTitle,
+          company: target.company,
+          appliedDate: target.appliedDate,
+          gmailThreadId: target.gmailThreadId,
+          emailSubject: target.emailSubject,
+          emailDate: target.emailDate,
+        } as Application;
+        await updateApplication(merged);
+        updated++;
+        continue;
+      }
+
       if (!incoming.jobTitle || !incoming.company) {
         skipped++;
         continue;
       }
-      const status: Status = STATUSES.includes(incoming.status as Status)
-        ? (incoming.status as Status)
-        : "pending";
-      const key = `${incoming.emailSubject || ""}|${incoming.emailDate || ""}`.toLowerCase();
-      const match = incoming.emailSubject ? byKey.get(key) : undefined;
+      let match: Application | undefined;
+      if (incoming.gmailThreadId) {
+        match = byThreadId.get(incoming.gmailThreadId);
+      }
+      if (!match && incoming.emailSubject) {
+        const key = `${incoming.emailSubject}|${incoming.emailDate || ""}`.toLowerCase();
+        match = bySubjectDate.get(key);
+      }
       if (match) {
         const merged: Application = {
           ...match,
@@ -56,7 +97,7 @@ export async function POST(req: NextRequest) {
         await updateApplication(merged);
         updated++;
       } else {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localDateString();
         const app: Application = {
           id: newId(),
           jobTitle: incoming.jobTitle,
@@ -71,6 +112,8 @@ export async function POST(req: NextRequest) {
           salaryRange: incoming.salaryRange || "",
           location: incoming.location || "",
           notes: incoming.notes || "",
+          easyApply: incoming.easyApply || "",
+          gmailThreadId: incoming.gmailThreadId || "",
         };
         await appendApplication(app);
         inserted++;

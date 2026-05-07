@@ -5,7 +5,7 @@ import {
   listApplications,
   newId,
 } from "@/lib/sheets";
-import { Application, STATUSES, Status } from "@/lib/types";
+import { Application, STATUSES, Status, localDateString } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
     const status: Status = STATUSES.includes(body.status as Status)
       ? (body.status as Status)
       : "pending";
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateString();
     const app: Application = {
       id: body.id || newId(),
       jobTitle: body.jobTitle,
@@ -49,6 +49,8 @@ export async function POST(req: NextRequest) {
       salaryRange: body.salaryRange || "",
       location: body.location || "",
       notes: body.notes || "",
+      easyApply: body.easyApply || "",
+      gmailThreadId: body.gmailThreadId || "",
     };
     await ensureHeaderRow();
     await appendApplication(app);
