@@ -2,7 +2,7 @@
 
 Terraform configuration for the jobtracker AWS environment.
 
-**Status:** scaffolding only — no resources defined yet. The Terraform bootstrap (S3 state bucket + DynamoDB lock table) lands in the next commit.
+**Status:** bootstrap module written, not yet applied. See [`bootstrap/README.md`](bootstrap/README.md) for the one-time setup that creates the remote state backend.
 
 ## Planned layout
 

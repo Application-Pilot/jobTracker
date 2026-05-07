@@ -1,0 +1,36 @@
+# Terraform-specific ignores for the infra/ tree.
+# These complement the root .gitignore.
+
+# Local .terraform directories (provider plugins, modules cache)
+# Note: .terraform.lock.hcl is the dependency lock file and SHOULD be committed.
+**/.terraform/*
+!**/.terraform.lock.hcl
+
+# .tfstate files — state must NEVER be committed.
+# For bootstrap/ we use local state (intentionally), but it stays out of git.
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Variable files that may contain secrets — never commit.
+# Only *.tfvars.example is allowed in git.
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+
+# Override files — local-only customisations
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# CLI config files (may contain credentials)
+.terraformrc
+terraform.rc
+
+# Plan output files
+*.tfplan
