@@ -13,3 +13,22 @@
 # Currently empty — modules will surface their own outputs through here once
 # we start composing them.
 # =============================================================================
+
+# -----------------------------------------------------------------------------
+# Data layer outputs
+# -----------------------------------------------------------------------------
+
+output "users_table_name" {
+  description = "DynamoDB table for user profiles."
+  value       = module.data.users_table_name
+}
+
+output "applications_table_name" {
+  description = "DynamoDB table for tracked job applications."
+  value       = module.data.applications_table_name
+}
+
+output "sync_state_table_name" {
+  description = "DynamoDB table for per-user Gmail sync state."
+  value       = module.data.sync_state_table_name
+}

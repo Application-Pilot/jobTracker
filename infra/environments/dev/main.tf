@@ -22,3 +22,23 @@
 locals {
   name_prefix = "${var.project}-${var.environment}"
 }
+
+# -----------------------------------------------------------------------------
+# Data layer — DynamoDB tables (users, applications, sync_state)
+# -----------------------------------------------------------------------------
+#
+# `source = "../../modules/data"` is a local path — Terraform reads the
+# module's files directly from disk. This is the simplest way to share
+# modules within a repo; other options (Git URL, Terraform Registry) only
+# matter when modules are reused across repos.
+#
+# We pass project/environment in so the module knows what to name resources.
+# Everything else uses sensible defaults defined in the module itself.
+# -----------------------------------------------------------------------------
+
+module "data" {
+  source = "../../modules/data"
+
+  project     = var.project
+  environment = var.environment
+}
