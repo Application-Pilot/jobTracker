@@ -34,3 +34,7 @@ terraform.rc
 
 # Plan output files
 *.tfplan
+
+# Build artifacts produced by archive_file (Lambda zips). Regenerated on
+# every apply from the OpenNext build output, so no reason to commit them.
+**/.build/

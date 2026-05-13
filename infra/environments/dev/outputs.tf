@@ -32,3 +32,27 @@ output "sync_state_table_name" {
   description = "DynamoDB table for per-user Gmail sync state."
   value       = module.data.sync_state_table_name
 }
+
+# -----------------------------------------------------------------------------
+# Web layer outputs
+# -----------------------------------------------------------------------------
+
+output "web_url" {
+  description = "Public URL of the deployed web app."
+  value       = module.web.cloudfront_url
+}
+
+output "web_cloudfront_distribution_id" {
+  description = "CloudFront distribution ID. Use for cache invalidations after deploys."
+  value       = module.web.cloudfront_distribution_id
+}
+
+output "web_assets_bucket" {
+  description = "S3 bucket holding the web app's static assets."
+  value       = module.web.assets_bucket_name
+}
+
+output "web_server_lambda" {
+  description = "Server Lambda function name. Use for deploy scripts that update code."
+  value       = module.web.server_lambda_name
+}

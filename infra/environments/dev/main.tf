@@ -42,3 +42,26 @@ module "data" {
   project     = var.project
   environment = var.environment
 }
+
+# -----------------------------------------------------------------------------
+# Web layer — Lambda + CloudFront + S3 via OpenNext (see docs/decisions/0001-web-hosting.md)
+# -----------------------------------------------------------------------------
+#
+# Consumes the OpenNext build output that lives in app/apps/web/.open-next/.
+# You must run `pnpm --filter @jobtracker/web build:lambda` before applying
+# this module — Terraform expects those files to exist on disk.
+#
+# Grants the server Lambda DynamoDB read on the users table only, scoped
+# narrowly so a Lambda compromise can't exfiltrate applications data.
+# -----------------------------------------------------------------------------
+
+module "web" {
+  source = "../../modules/web"
+
+  project          = var.project
+  environment      = var.environment
+  open_next_dir    = "${path.module}/../../../app/apps/web/.open-next"
+
+  users_table_name = module.data.users_table_name
+  users_table_arn  = module.data.users_table_arn
+}

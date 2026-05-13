@@ -27,11 +27,16 @@ terraform {
   required_providers {
     aws = {
       source = "hashicorp/aws"
-      # ~> 5.70 means "any 5.x at or above 5.70, but not 6.x". This lets us
-      # accept patch and minor updates automatically while blocking major-
-      # version upgrades, which can have breaking changes. The lock file
-      # (.terraform.lock.hcl) records the exact version we resolved to.
-      version = "~> 5.70"
+      # AWS added an invoked_via_function_url permission flag for Lambda
+      # Function URLs after the provider 5.x line. The lock file records the
+      # exact version resolved by terraform init.
+      version = ">= 6.44, < 7.0"
+    }
+    # The archive provider zips files on disk (used by modules/web to
+    # package Lambda code into the .zip that aws_lambda_function uploads).
+    archive = {
+      source  = "hashicorp/archive"
+      version = "~> 2.4"
     }
   }
 
