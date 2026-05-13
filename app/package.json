@@ -1,0 +1,15 @@
+{
+  "name": "jobtracker-monorepo",
+  "private": true,
+  "description": "Root of the jobtracker pnpm workspace. Holds apps/* and packages/*.",
+  "engines": {
+    "node": ">=20",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm -r run dev",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck"
+  }
+}

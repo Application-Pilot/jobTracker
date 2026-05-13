@@ -1,0 +1,7 @@
+# pnpm workspace config.
+# Every directory matching these globs becomes a workspace package.
+# Workspace packages can depend on each other by name (e.g.,
+# "@jobtracker/llm": "workspace:*") and pnpm installs once at the root.
+packages:
+  - "apps/*"
+  - "packages/*"

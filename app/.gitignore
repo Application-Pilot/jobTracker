@@ -1,0 +1,21 @@
+# Workspace-level node_modules + build output.
+# Root .gitignore covers most of this; this file pins the explicit list
+# so a curious reader doesn't have to grep around to know what's ignored.
+
+node_modules/
+.pnp.*
+.yarn/
+
+# Per-package build output (Next.js, OpenNext, tsc)
+**/.next/
+**/.open-next/
+**/dist/
+**/build/
+**/.turbo/
+**/*.tsbuildinfo
+**/next-env.d.ts
+
+# Env files (workspace-wide safety; secrets should never land in git)
+.env
+.env.*
+!.env.example
