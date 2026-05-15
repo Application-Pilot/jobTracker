@@ -1,0 +1,23 @@
+# =============================================================================
+# terraform.tfvars.example — Variable inputs for the dev environment
+# =============================================================================
+#
+# Copy this file to terraform.tfvars (which is gitignored) and fill in the
+# actual values. The real file MUST never be committed.
+#
+#   cp terraform.tfvars.example terraform.tfvars
+#   # edit terraform.tfvars with your real values
+#
+# Get the Google OAuth credentials from:
+#   https://console.cloud.google.com → APIs & Services → Credentials
+#   → click your OAuth 2.0 Client ID → Client ID + Client secret on the right
+#
+# Make sure that client has these redirect URIs registered (these are
+# enforced by Google before redirecting back from consent):
+#   https://jobtracker-dev.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
+#   https://d2etjfsuqxfql6.cloudfront.net/api/auth/callback
+#   http://localhost:3001/api/auth/callback
+# =============================================================================
+
+google_client_id     = "1234567890-xxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+google_client_secret = "GOCSPX-replace-with-your-actual-secret"

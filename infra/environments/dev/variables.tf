@@ -33,3 +33,23 @@ variable "project" {
   type        = string
   default     = "jobtracker"
 }
+
+# ---------------------------------------------------------------------------
+# Auth module inputs — Google OAuth credentials
+# ---------------------------------------------------------------------------
+# These come from `terraform.tfvars` (gitignored). See `terraform.tfvars.example`
+# for the shape. Both are marked sensitive so they never appear in plan output
+# or in the `terraform output` JSON.
+# ---------------------------------------------------------------------------
+
+variable "google_client_id" {
+  description = "Google OAuth 2.0 Client ID for the Cognito Google IdP. Created in Google Cloud Console."
+  type        = string
+  sensitive   = true
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth 2.0 Client Secret. Required by Cognito to redeem auth codes from Google."
+  type        = string
+  sensitive   = true
+}
