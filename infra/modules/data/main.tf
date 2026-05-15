@@ -27,6 +27,17 @@
 #     false in code and apply *first*, then destroy.
 #
 # Cost reality at 500 users with moderate activity: under $1/month total.
+#
+# DEPRECATION NOTE (2026-05): AWS provider 6.x has begun deprecating the
+# top-level `hash_key` / `range_key` arguments in favor of a `key_schema`
+# block ("hash_key is deprecated. Use key_schema instead"). However, the
+# `key_schema` block is not yet available at the top-level resource in
+# provider 6.44 — only inside `global_secondary_index`. Migrating now
+# would either fail validation or force table recreation (data loss).
+#
+# We are intentionally leaving `hash_key` / `range_key` in place until the
+# provider fully supports `key_schema` at the resource level (expected in
+# a later 6.x release). Tracking: re-evaluate when bumping the provider.
 # =============================================================================
 
 # Locals derive consistent names so we don't repeat string interpolation.

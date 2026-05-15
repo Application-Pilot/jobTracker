@@ -3,8 +3,12 @@ terraform {
 
   required_providers {
     aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.70"
+      source = "hashicorp/aws"
+      # Pinned to v6.x to match the dev/prod environments. Bootstrap has its
+      # own local state and could in principle stay on 5.x, but consistent
+      # provider versions across modules avoids confusion and means a single
+      # `terraform init -upgrade` in any module exercises the same provider.
+      version = ">= 6.0, < 7.0"
     }
   }
 
