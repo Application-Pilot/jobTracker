@@ -38,6 +38,13 @@ terraform {
       source  = "hashicorp/archive"
       version = "~> 2.4"
     }
+    # The random provider generates the SESSION_SECRET used by the web
+    # Lambda to wrap session cookies. State-stored; never regenerated
+    # unless explicitly tainted.
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.6"
+    }
   }
 
   # ---------------------------------------------------------------------------

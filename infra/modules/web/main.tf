@@ -215,6 +215,20 @@ resource "aws_s3_bucket_policy" "assets" {
 }
 
 # =============================================================================
+# Session secret — random string used by the app to wrap session cookies
+# =============================================================================
+#
+# Generated once and stored in Terraform state. The lifecycle ignore on
+# the result attribute means subsequent applies won't regenerate it
+# (which would log every user out). To rotate, taint this resource.
+# =============================================================================
+
+resource "random_password" "session_secret" {
+  length  = 64
+  special = false # alphanumeric only — safer to round-trip through env vars
+}
+
+# =============================================================================
 # Lambda functions (server + image optimization)
 # =============================================================================
 #
@@ -328,6 +342,31 @@ resource "aws_lambda_function" "server" {
       USERS_TABLE = var.users_table_name
       # Some Next.js internals expect this to be set explicitly in Lambda.
       NODE_ENV = "production"
+
+      # ----- Cognito wiring (Stage 2, Session A) -----
+      # The Lambda fetches Cognito's JWKS from a URL derived from the user
+      # pool ID, then verifies signed JWTs on incoming requests.
+      COGNITO_USER_POOL_ID = var.cognito_user_pool_id
+      COGNITO_CLIENT_ID    = var.cognito_client_id
+      # Client secret is used by /api/auth/callback when exchanging the
+      # OAuth code for tokens.
+      COGNITO_CLIENT_SECRET = var.cognito_client_secret
+      # The hosted-UI domain — also used to compute the JWKS URL and the
+      # initial login redirect.
+      COGNITO_DOMAIN = var.cognito_domain_full_url
+
+      # Public app URL. Used to construct redirect_uri values for the
+      # OAuth code flow. NEXT_PUBLIC_ prefix would expose it to the
+      # browser, but server-only Lambdas don't need that distinction; we
+      # keep it as a plain server env var.
+      APP_URL = var.app_url
+
+      # Random secret used by the app to sign/encrypt the session cookie
+      # contents (the access token is wrapped, not bare). Created by the
+      # random_password resource below; lifecycle keeps it stable across
+      # plans (so signing a session cookie one minute and reading it the
+      # next still works).
+      SESSION_SECRET = random_password.session_secret.result
     }
   }
 

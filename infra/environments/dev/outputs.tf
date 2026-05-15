@@ -34,6 +34,30 @@ output "sync_state_table_name" {
 }
 
 # -----------------------------------------------------------------------------
+# Auth layer outputs
+# -----------------------------------------------------------------------------
+
+output "cognito_user_pool_id" {
+  description = "Cognito User Pool ID."
+  value       = module.auth.user_pool_id
+}
+
+output "cognito_client_id" {
+  description = "Cognito App Client ID."
+  value       = module.auth.client_id
+}
+
+output "cognito_domain_full_url" {
+  description = "Full hosted UI base URL (https://...amazoncognito.com)."
+  value       = module.auth.domain_full_url
+}
+
+output "cognito_google_idp_callback_url" {
+  description = "URL to register in Google Cloud Console as an Authorized redirect URI on the OAuth client."
+  value       = module.auth.google_idp_callback_url
+}
+
+# -----------------------------------------------------------------------------
 # Web layer outputs
 # -----------------------------------------------------------------------------
 

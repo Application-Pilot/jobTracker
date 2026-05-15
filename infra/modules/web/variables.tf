@@ -75,3 +75,36 @@ variable "users_table_arn" {
   description = "ARN of the users DynamoDB table. Used in the Lambda IAM policy."
   type        = string
 }
+
+# ---------------------------------------------------------------------------
+# Cognito wiring — passed in from the auth module via the environment
+# ---------------------------------------------------------------------------
+# The server Lambda needs these to validate JWTs and to construct the
+# hosted-UI redirect URL. Marked sensitive where applicable so they don't
+# show up in plan output.
+
+variable "cognito_user_pool_id" {
+  description = "Cognito User Pool ID. Used by the Lambda to fetch the JWKS for JWT signature verification."
+  type        = string
+}
+
+variable "cognito_client_id" {
+  description = "Cognito App Client ID. Embedded in the hosted-UI redirect URL and token-exchange requests."
+  type        = string
+}
+
+variable "cognito_client_secret" {
+  description = "Cognito App Client Secret. Required for the /api/auth/callback token exchange."
+  type        = string
+  sensitive   = true
+}
+
+variable "cognito_domain_full_url" {
+  description = "Full hosted-UI base URL (e.g., https://jobtracker-dev.auth.us-east-1.amazoncognito.com)."
+  type        = string
+}
+
+variable "app_url" {
+  description = "Public URL of the deployed app (e.g., the CloudFront URL). Used to construct OAuth callback redirects."
+  type        = string
+}
