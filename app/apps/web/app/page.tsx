@@ -1,43 +1,32 @@
 /**
  * Home page — server component (default for App Router).
  *
- * This is a React Server Component, so the DynamoDB read happens on the
- * server (the Lambda) on every request. No client-side JS needed for the
- * counter. When deployed:
+ * Middleware (middleware.ts at the repo root) verifies the user's
+ * session before this component renders, and sets x-user-email +
+ * x-user-sub + x-user-name as request headers. We read those headers
+ * here using next/headers — no client JS, no extra Cognito round-trip.
  *
- *   1. CloudFront receives the request
- *   2. Routes "/" to the SSR Lambda
- *   3. Lambda runs this component, calls DynamoDB, returns rendered HTML
- *   4. CloudFront serves the HTML back to the browser
- *
- * The DynamoDB call is wrapped in try/catch because Lambda's IAM role
- * permissions or AWS_REGION might not be set during local dev — we don't
- * want the dev experience broken if the env isn't AWS-shaped.
+ * The DynamoDB call is wrapped in try/catch because local dev (without
+ * AWS credentials) should still render the page gracefully.
  */
 
+import { headers } from 'next/headers';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 
 // Force this page to render on every request rather than be statically
-// pre-rendered at build time. The user count is dynamic; we want it fresh.
+// pre-rendered at build time. We need fresh user count + headers.
 export const dynamic = 'force-dynamic';
 
-/**
- * Reads the count of items in the users table. Returns null on any failure
- * so the page still renders gracefully if the DB is unreachable.
- */
 async function getUserCount(): Promise<number | null> {
   const tableName = process.env.USERS_TABLE;
   if (!tableName) return null;
-
   try {
     const client = DynamoDBDocumentClient.from(
-      new DynamoDBClient({ region: process.env.AWS_REGION ?? 'us-east-1' })
+      new DynamoDBClient({ region: process.env.AWS_REGION ?? 'us-east-1' }),
     );
-    // Scan returns the entire table; fine while users are few. At scale
-    // we'd keep a counter in a stats table instead of scanning every load.
     const result = await client.send(
-      new ScanCommand({ TableName: tableName, Select: 'COUNT' })
+      new ScanCommand({ TableName: tableName, Select: 'COUNT' }),
     );
     return result.Count ?? 0;
   } catch (err) {
@@ -47,6 +36,12 @@ async function getUserCount(): Promise<number | null> {
 }
 
 export default async function HomePage() {
+  // Middleware always sets these for authenticated requests (and never
+  // lets unauthenticated requests reach this page).
+  const h = await headers();
+  const email = h.get('x-user-email');
+  const name = h.get('x-user-name');
+
   const userCount = await getUserCount();
 
   return (
@@ -65,6 +60,23 @@ export default async function HomePage() {
         Jobtracker
       </h1>
       <p style={{ color: '#888', margin: '0.5rem 0 2rem' }}>Coming soon.</p>
+
+      {email && (
+        <section
+          style={{
+            padding: '1rem 1.5rem',
+            border: '1px solid #2a4',
+            borderRadius: '0.5rem',
+            background: '#0c1f0c',
+            color: '#9fc99f',
+            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            fontSize: '0.9rem',
+            marginBottom: '1rem',
+          }}
+        >
+          Signed in as <strong>{name ? `${name} (${email})` : email}</strong>
+        </section>
+      )}
 
       <section
         style={{
@@ -86,6 +98,18 @@ export default async function HomePage() {
         )}
       </section>
 
+      <a
+        href="/api/auth/logout"
+        style={{
+          marginTop: '1.5rem',
+          color: '#888',
+          fontSize: '0.85rem',
+          textDecoration: 'underline',
+        }}
+      >
+        Sign out
+      </a>
+
       <footer
         style={{
           marginTop: 'auto',
@@ -94,7 +118,7 @@ export default async function HomePage() {
           fontSize: '0.75rem',
         }}
       >
-        Deployed via Terraform on AWS Lambda + CloudFront + S3.
+        Deployed via Terraform on AWS Lambda + CloudFront + S3 · Auth via Cognito + Google
       </footer>
     </main>
   );
