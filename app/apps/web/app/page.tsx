@@ -11,27 +11,29 @@
  */
 
 import { headers } from 'next/headers';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
+import { getUser, getUserCount, type UserRow } from '@/lib/users';
 
 // Force this page to render on every request rather than be statically
 // pre-rendered at build time. We need fresh user count + headers.
 export const dynamic = 'force-dynamic';
 
-async function getUserCount(): Promise<number | null> {
-  const tableName = process.env.USERS_TABLE;
-  if (!tableName) return null;
+async function getHomeData(userId: string | null): Promise<{
+  user: UserRow | null;
+  userCount: number | null;
+}> {
+  if (!process.env.USERS_TABLE) {
+    return { user: null, userCount: null };
+  }
+
   try {
-    const client = DynamoDBDocumentClient.from(
-      new DynamoDBClient({ region: process.env.AWS_REGION ?? 'us-east-1' }),
-    );
-    const result = await client.send(
-      new ScanCommand({ TableName: tableName, Select: 'COUNT' }),
-    );
-    return result.Count ?? 0;
+    const [user, userCount] = await Promise.all([
+      userId ? getUser(userId) : Promise.resolve(null),
+      getUserCount(),
+    ]);
+    return { user, userCount };
   } catch (err) {
-    console.error('getUserCount failed:', err);
-    return null;
+    console.error('getHomeData failed:', err);
+    return { user: null, userCount: null };
   }
 }
 
@@ -41,8 +43,10 @@ export default async function HomePage() {
   const h = await headers();
   const email = h.get('x-user-email');
   const name = h.get('x-user-name');
+  const userId = h.get('x-user-sub');
 
-  const userCount = await getUserCount();
+  const { user, userCount } = await getHomeData(userId);
+  const gmailConnected = user?.gmailConnected === true;
 
   return (
     <main
@@ -95,6 +99,56 @@ export default async function HomePage() {
           <>
             Registered users in DynamoDB: <strong>{userCount}</strong>
           </>
+        )}
+      </section>
+
+      <section
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '0.75rem',
+          marginTop: '1rem',
+          padding: '1rem 1.5rem',
+          border: '1px solid #222',
+          borderRadius: '0.5rem',
+          background: '#111',
+          color: '#ddd',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: '0.9rem',
+        }}
+      >
+        {gmailConnected ? (
+          <>
+            <span>Gmail: connected ✅</span>
+            <a
+              href="/api/gmail/disconnect"
+              style={{
+                color: '#aaa',
+                fontSize: '0.85rem',
+                textDecoration: 'underline',
+              }}
+            >
+              Disconnect
+            </a>
+          </>
+        ) : (
+          <a
+            href="/api/gmail/connect"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              minHeight: '2.25rem',
+              padding: '0 1rem',
+              borderRadius: '0.4rem',
+              background: '#e8eefc',
+              color: '#111',
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            Connect Gmail
+          </a>
         )}
       </section>
 
