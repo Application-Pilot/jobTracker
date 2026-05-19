@@ -110,3 +110,55 @@ export async function getUserCount(): Promise<number> {
   );
   return result.Count ?? 0;
 }
+
+export async function connectGmailAccount({
+  userId,
+  encryptedRefreshToken,
+  scopes,
+}: {
+  userId: string;
+  encryptedRefreshToken: string;
+  scopes: string[];
+}): Promise<void> {
+  const now = new Date().toISOString();
+  await getDocClient().send(
+    new UpdateCommand({
+      TableName: getTableName(),
+      Key: { userId },
+      UpdateExpression:
+        'SET #gmailConnected = :connected, #gmailRefreshToken = :token, #gmailScopes = :scopes, #gmailConnectedAt = :now',
+      ExpressionAttributeNames: {
+        '#gmailConnected': 'gmailConnected',
+        '#gmailRefreshToken': 'gmailRefreshToken',
+        '#gmailScopes': 'gmailScopes',
+        '#gmailConnectedAt': 'gmailConnectedAt',
+      },
+      ExpressionAttributeValues: {
+        ':connected': true,
+        ':token': encryptedRefreshToken,
+        ':scopes': scopes,
+        ':now': now,
+      },
+    }),
+  );
+}
+
+export async function disconnectGmailAccount(userId: string): Promise<void> {
+  await getDocClient().send(
+    new UpdateCommand({
+      TableName: getTableName(),
+      Key: { userId },
+      UpdateExpression:
+        'SET #gmailConnected = :connected REMOVE #gmailRefreshToken, #gmailScopes, #gmailConnectedAt',
+      ExpressionAttributeNames: {
+        '#gmailConnected': 'gmailConnected',
+        '#gmailRefreshToken': 'gmailRefreshToken',
+        '#gmailScopes': 'gmailScopes',
+        '#gmailConnectedAt': 'gmailConnectedAt',
+      },
+      ExpressionAttributeValues: {
+        ':connected': false,
+      },
+    }),
+  );
+}
