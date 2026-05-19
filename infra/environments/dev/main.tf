@@ -116,6 +116,6 @@ module "web" {
 
   app_url = local.app_url_prod
 
-  gmail_oauth_client_id     = var.gmail_oauth_client_id
-  gmail_oauth_client_secret = var.gmail_oauth_client_secret
+  gmail_oauth_client_id     = coalesce(var.gmail_oauth_client_id, var.google_client_id)
+  gmail_oauth_client_secret = coalesce(var.gmail_oauth_client_secret, var.google_client_secret)
 }
