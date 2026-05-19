@@ -308,6 +308,35 @@ resource "aws_iam_role_policy" "server_dynamodb" {
   policy = data.aws_iam_policy_document.server_dynamodb.json
 }
 
+data "aws_iam_policy_document" "server_dashboard_read" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:Query",
+    ]
+    resources = [
+      var.applications_table_arn,
+      "${var.applications_table_arn}/index/*",
+    ]
+  }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "dynamodb:GetItem",
+    ]
+    resources = [
+      var.sync_state_table_arn,
+    ]
+  }
+}
+
+resource "aws_iam_role_policy" "server_dashboard_read" {
+  name   = "${local.name_prefix}-web-server-dashboard-read"
+  role   = aws_iam_role.server.id
+  policy = data.aws_iam_policy_document.server_dashboard_read.json
+}
+
 data "aws_iam_policy_document" "server_kms_tokens" {
   statement {
     effect = "Allow"
@@ -358,7 +387,9 @@ resource "aws_lambda_function" "server" {
   environment {
     variables = {
       # Tell the app where to find its data. Read by app/apps/web/app/page.tsx.
-      USERS_TABLE = var.users_table_name
+      USERS_TABLE        = var.users_table_name
+      APPLICATIONS_TABLE = var.applications_table_name
+      SYNC_STATE_TABLE   = var.sync_state_table_name
       # Some Next.js internals expect this to be set explicitly in Lambda.
       NODE_ENV = "production"
 

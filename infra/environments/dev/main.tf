@@ -106,6 +106,11 @@ module "web" {
   users_table_name = module.data.users_table_name
   users_table_arn  = module.data.users_table_arn
 
+  applications_table_name = module.data.applications_table_name
+  applications_table_arn  = module.data.applications_table_arn
+  sync_state_table_name   = module.data.sync_state_table_name
+  sync_state_table_arn    = module.data.sync_state_table_arn
+
   token_kms_key_arn = module.auth.token_kms_key_arn
 
   # Cognito wiring — outputs from the auth module above.
@@ -118,4 +123,36 @@ module "web" {
 
   gmail_oauth_client_id     = coalesce(var.gmail_oauth_client_id, var.google_client_id)
   gmail_oauth_client_secret = coalesce(var.gmail_oauth_client_secret, var.google_client_secret)
+}
+
+# -----------------------------------------------------------------------------
+# Sync layer — EventBridge + SQS + Lambda worker pipeline
+# -----------------------------------------------------------------------------
+#
+# Consumes the small esbuild-produced Lambda zips under app/apps/{scheduler,
+# sync-worker}/dist. Run `pnpm --filter @jobtracker/scheduler build` and
+# `pnpm --filter @jobtracker/sync-worker build` before planning/applying.
+# The worker uses a stub classifier in Session C; real Gmail parsing and LLM
+# extraction are deferred to Session D.
+# -----------------------------------------------------------------------------
+
+module "sync" {
+  source = "../../modules/sync"
+
+  project     = var.project
+  environment = var.environment
+
+  users_table_name        = module.data.users_table_name
+  users_table_arn         = module.data.users_table_arn
+  applications_table_name = module.data.applications_table_name
+  applications_table_arn  = module.data.applications_table_arn
+  sync_state_table_name   = module.data.sync_state_table_name
+  sync_state_table_arn    = module.data.sync_state_table_arn
+  token_kms_key_arn       = module.auth.token_kms_key_arn
+
+  gmail_oauth_client_id     = coalesce(var.gmail_oauth_client_id, var.google_client_id)
+  gmail_oauth_client_secret = coalesce(var.gmail_oauth_client_secret, var.google_client_secret)
+
+  scheduler_zip_path = "${path.module}/../../../app/apps/scheduler/dist/scheduler.zip"
+  worker_zip_path    = "${path.module}/../../../app/apps/sync-worker/dist/worker.zip"
 }

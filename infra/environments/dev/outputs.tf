@@ -90,3 +90,22 @@ output "web_server_lambda" {
   description = "Server Lambda function name. Use for deploy scripts that update code."
   value       = module.web.server_lambda_name
 }
+
+# -----------------------------------------------------------------------------
+# Sync layer outputs
+# -----------------------------------------------------------------------------
+
+output "jobs_queue_url" {
+  description = "SQS queue URL for scheduled sync jobs."
+  value       = module.sync.jobs_queue_url
+}
+
+output "scheduler_function_name" {
+  description = "EventBridge-triggered sync scheduler Lambda function name."
+  value       = module.sync.scheduler_function_name
+}
+
+output "worker_function_name" {
+  description = "SQS-triggered sync worker Lambda function name."
+  value       = module.sync.worker_function_name
+}

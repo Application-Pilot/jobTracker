@@ -11,6 +11,7 @@
  */
 
 import { headers } from 'next/headers';
+import { getApplicationCount, getSyncState } from '@/lib/sync-summary';
 import { getUser, getUserCount, type UserRow } from '@/lib/users';
 
 // Force this page to render on every request rather than be statically
@@ -20,21 +21,60 @@ export const dynamic = 'force-dynamic';
 async function getHomeData(userId: string | null): Promise<{
   user: UserRow | null;
   userCount: number | null;
+  applicationCount: number | null;
+  lastSyncAt: string | null;
 }> {
   if (!process.env.USERS_TABLE) {
-    return { user: null, userCount: null };
+    return {
+      user: null,
+      userCount: null,
+      applicationCount: null,
+      lastSyncAt: null,
+    };
   }
 
   try {
-    const [user, userCount] = await Promise.all([
+    const [user, userCount, syncState, applicationCount] = await Promise.all([
       userId ? getUser(userId) : Promise.resolve(null),
       getUserCount(),
+      userId ? getSyncState(userId) : Promise.resolve(null),
+      userId ? getApplicationCount(userId) : Promise.resolve(null),
     ]);
-    return { user, userCount };
+    return {
+      user,
+      userCount,
+      applicationCount,
+      lastSyncAt: syncState?.lastSyncAt ?? null,
+    };
   } catch (err) {
     console.error('getHomeData failed:', err);
-    return { user: null, userCount: null };
+    return {
+      user: null,
+      userCount: null,
+      applicationCount: null,
+      lastSyncAt: null,
+    };
   }
+}
+
+function formatLastSync(lastSyncAt: string | null): string {
+  if (!lastSyncAt) {
+    return 'never';
+  }
+
+  const timestamp = Date.parse(lastSyncAt);
+  if (Number.isNaN(timestamp)) {
+    return lastSyncAt;
+  }
+
+  const minutesAgo = Math.max(0, Math.floor((Date.now() - timestamp) / 60000));
+  if (minutesAgo === 0) {
+    return 'just now';
+  }
+  if (minutesAgo === 1) {
+    return '1 minute ago';
+  }
+  return `${minutesAgo} minutes ago`;
 }
 
 export default async function HomePage() {
@@ -45,7 +85,8 @@ export default async function HomePage() {
   const name = h.get('x-user-name');
   const userId = h.get('x-user-sub');
 
-  const { user, userCount } = await getHomeData(userId);
+  const { user, userCount, applicationCount, lastSyncAt } =
+    await getHomeData(userId);
   const gmailConnected = user?.gmailConnected === true;
 
   return (
@@ -100,6 +141,37 @@ export default async function HomePage() {
             Registered users in DynamoDB: <strong>{userCount}</strong>
           </>
         )}
+      </section>
+
+      <section
+        style={{
+          marginTop: '1rem',
+          padding: '1rem 1.5rem',
+          border: '1px solid #222',
+          borderRadius: '0.5rem',
+          background: '#111',
+          color: '#aaa',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: '0.9rem',
+        }}
+      >
+        Last sync: <strong>{formatLastSync(lastSyncAt)}</strong>
+      </section>
+
+      <section
+        style={{
+          marginTop: '1rem',
+          padding: '1rem 1.5rem',
+          border: '1px solid #222',
+          borderRadius: '0.5rem',
+          background: '#111',
+          color: '#aaa',
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          fontSize: '0.9rem',
+        }}
+      >
+        Applications tracked:{' '}
+        <strong>{applicationCount === null ? 'unknown' : applicationCount}</strong>
       </section>
 
       <section

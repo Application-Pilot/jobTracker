@@ -1,0 +1,21 @@
+{
+  "name": "@jobtracker/scheduler",
+  "version": "0.0.0",
+  "private": true,
+  "description": "EventBridge-triggered scheduler that enqueues Gmail sync jobs.",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.700.0",
+    "@aws-sdk/client-sqs": "^3.700.0",
+    "@aws-sdk/lib-dynamodb": "^3.700.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.21.5",
+    "typescript": "^5.5.0"
+  }
+}

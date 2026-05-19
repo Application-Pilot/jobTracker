@@ -76,6 +76,26 @@ variable "users_table_arn" {
   type        = string
 }
 
+variable "applications_table_name" {
+  description = "Name of the applications DynamoDB table — passed as APPLICATIONS_TABLE env var for dashboard counts."
+  type        = string
+}
+
+variable "applications_table_arn" {
+  description = "ARN of the applications DynamoDB table. Used for read-only dashboard counts."
+  type        = string
+}
+
+variable "sync_state_table_name" {
+  description = "Name of the sync_state DynamoDB table — passed as SYNC_STATE_TABLE env var for dashboard sync status."
+  type        = string
+}
+
+variable "sync_state_table_arn" {
+  description = "ARN of the sync_state DynamoDB table. Used for read-only dashboard sync status."
+  type        = string
+}
+
 variable "token_kms_key_arn" {
   description = "ARN of the KMS key used to encrypt Gmail refresh tokens."
   type        = string
