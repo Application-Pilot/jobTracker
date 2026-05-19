@@ -45,6 +45,16 @@ function callbackUrl(): string {
 /**
  * Builds the URL to redirect the user to to start the sign-in flow.
  * Forces Google as the IdP (skipping Cognito's IdP-chooser screen).
+ *
+ * `prompt=login` forces the upstream IdP (Google, via Cognito) to
+ * re-prompt for credentials on every sign-in, even if Cognito or Google
+ * already has an active session for the user. Without this parameter,
+ * SSO silently re-signs the user in after a logout — which is the
+ * correct UX for production but defeats interactive testing.
+ *
+ * In Stage 3 polish, consider gating prompt=login behind a query
+ * parameter (e.g., /api/auth/login?force=1) so returning users get the
+ * silent SSO experience by default.
  */
 export function getLoginUrl(state: string): string {
   const { domain, clientId } = getEnv();
@@ -54,6 +64,7 @@ export function getLoginUrl(state: string): string {
     scope: 'openid profile email',
     redirect_uri: callbackUrl(),
     identity_provider: 'Google',
+    prompt: 'login',
     state,
   });
   return `${domain}/oauth2/authorize?${params}`;
@@ -63,12 +74,16 @@ export function getLoginUrl(state: string): string {
  * Builds the URL to redirect the user to to sign out of Cognito.
  * Cognito will then redirect to logout_uri (must be registered as a
  * logout URL on the user pool client; the dev env wires this up).
+ *
+ * Logout returns the user to /signed-out — a static page that the
+ * middleware allows through without a session, so the user actually
+ * sees confirmation instead of being bounced back into sign-in.
  */
 export function getLogoutUrl(): string {
   const { domain, clientId, appUrl } = getEnv();
   const params = new URLSearchParams({
     client_id: clientId,
-    logout_uri: `${appUrl}/`,
+    logout_uri: `${appUrl}/signed-out`,
   });
   return `${domain}/logout?${params}`;
 }

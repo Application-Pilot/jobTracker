@@ -33,22 +33,53 @@ export const config = {
   //   - /api/auth/*    (OAuth callback must be reachable without a session)
   //   - /_next/*       (Next.js static files — public by design)
   //   - /favicon.ico   (browsers request this without cookies)
-  matcher: ['/((?!api/auth|_next|favicon\\.ico).*)'],
+  //   - /signed-out    (landing page after Cognito logout — no session needed)
+  matcher: ['/((?!api/auth|_next|favicon\\.ico|signed-out).*)'],
 };
 
 export async function middleware(req: NextRequest) {
+  // Defense-in-depth: if someone navigates DIRECTLY to the Lambda Function
+  // URL (bypassing CloudFront), the OAuth redirect chain would break (the
+  // OAuth redirect target is the CloudFront domain; the Lambda URL is a
+  // different origin). Reject early so users get a clear pointer to the
+  // canonical URL.
+  //
+  // Why not Host? AWS rewrites the Host header to the Lambda URL on every
+  // CloudFront-proxied request, so checking Host would reject all
+  // legitimate traffic. Instead we check for CloudFront-injected headers:
+  //   - `x-amz-cf-id`: added by CloudFront on every request, hard to forge
+  //   - `via`: contains "CloudFront" for CloudFront-proxied requests
+  // Either being present is sufficient evidence.
+  const hasCfId = req.headers.has('x-amz-cf-id');
+  const via = req.headers.get('via') ?? '';
+  const isFromCloudFront = hasCfId || via.includes('CloudFront');
+  if (!isFromCloudFront) {
+    return new NextResponse(
+      'This is an internal endpoint. Please visit https://d2etjfsuqxfql6.cloudfront.net instead.',
+      { status: 421, headers: { 'Content-Type': 'text/plain' } },
+    );
+  }
+
+  // Resolve the canonical base URL once. APP_URL is set by Terraform to
+  // the CloudFront URL (never the Lambda Function URL). Always redirect
+  // to APP_URL-relative paths — never `new URL(..., req.url)`, which
+  // would resolve to the Lambda host and send the user away from the
+  // public domain.
+  const appUrl = process.env.APP_URL ?? '';
+  const loginUrl = `${appUrl}/api/auth/login`;
+
   const idToken = await readSession(req);
 
   if (!idToken) {
     // No cookie or HMAC failed — bounce to login.
-    return NextResponse.redirect(new URL('/api/auth/login', req.url));
+    return NextResponse.redirect(loginUrl);
   }
 
   const claims = await verifyToken(idToken);
   if (!claims) {
     // Cookie was real but the ID token is expired or invalid — clear the
     // cookie and bounce to login.
-    const res = NextResponse.redirect(new URL('/api/auth/login', req.url));
+    const res = NextResponse.redirect(loginUrl);
     res.cookies.set('jobtracker_session', '', { maxAge: 0, path: '/' });
     return res;
   }

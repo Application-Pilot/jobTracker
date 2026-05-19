@@ -75,6 +75,10 @@ module "auth" {
   ]
 
   logout_urls = [
+    "${local.app_url_prod}/signed-out",
+    "${local.app_url_dev}/signed-out",
+    # Keep the bare-/ entries as fallbacks in case anything links there
+    # during development. Removing them later is harmless.
     "${local.app_url_prod}/",
     "${local.app_url_dev}/",
   ]

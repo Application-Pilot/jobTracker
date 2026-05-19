@@ -1,41 +1,30 @@
 /**
  * /api/auth/login — kicks off the Google sign-in flow.
  *
- * Steps:
- *   1. Generate a random `state` value for CSRF protection.
- *   2. Store it in a short-lived cookie.
- *   3. Redirect the user to Cognito's hosted UI with `state` in the URL.
+ * Uses a "signed state" approach instead of a state cookie:
  *
- * When Cognito redirects back to /api/auth/callback, that handler
- * compares the state in the URL to the state in the cookie and rejects
- * mismatches. This prevents an attacker from completing the OAuth flow
- * on someone else's behalf via a forged callback URL.
+ *   1. Generate a random nonce and a server-issued timestamp.
+ *   2. HMAC-sign the nonce+timestamp with SESSION_SECRET.
+ *   3. Encode `{nonce}.{timestamp}.{sig}` as the `state` parameter in
+ *      the Cognito redirect URL.
+ *   4. On the callback, recompute the HMAC and verify timestamp freshness.
+ *
+ * Why not a state cookie? Because modern Chrome (and Brave, and Safari
+ * with cross-site cookie blocking) increasingly drops cross-site cookies
+ * even with SameSite=None; Secure. The OAuth round-trip via Cognito
+ * counts as cross-site. A signed URL parameter survives the round-trip
+ * without needing the browser to cooperate on cookies — and is
+ * actually more robust than the cookie approach: even if the state cookie
+ * leaks, an attacker can't forge a valid state without SESSION_SECRET.
  */
 import { NextResponse } from 'next/server';
 import { getLoginUrl } from '@/lib/cognito';
+import { signState } from '@/lib/state';
 
 export const dynamic = 'force-dynamic';
 
-const STATE_COOKIE = 'jobtracker_oauth_state';
-
 export async function GET() {
-  // 16 bytes → 32 hex chars. Plenty of entropy to prevent collisions.
-  const stateBytes = crypto.getRandomValues(new Uint8Array(16));
-  const state = Array.from(stateBytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-
+  const state = await signState();
   const loginUrl = getLoginUrl(state);
-
-  const res = NextResponse.redirect(loginUrl);
-  // Short-lived cookie just for the round-trip. 10 minutes is generous
-  // for users who take a while at the Google consent screen.
-  res.cookies.set(STATE_COOKIE, state, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax',
-    path: '/',
-    maxAge: 60 * 10,
-  });
-  return res;
+  return NextResponse.redirect(loginUrl);
 }

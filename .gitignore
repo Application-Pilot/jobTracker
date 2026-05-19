@@ -7,7 +7,7 @@
 .vscode/
 *.swp
 *~
-
+.claude/
 # Personal working notes (not part of the project record)
 AWS_CLEANUP_TODO.md
 
@@ -47,3 +47,4 @@ out/
 build/
 dist/
 *.tsbuildinfo
+.claude/settings.json
