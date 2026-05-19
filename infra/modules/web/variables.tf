@@ -76,6 +76,11 @@ variable "users_table_arn" {
   type        = string
 }
 
+variable "token_kms_key_arn" {
+  description = "ARN of the KMS key used to encrypt Gmail refresh tokens."
+  type        = string
+}
+
 # ---------------------------------------------------------------------------
 # Cognito wiring — passed in from the auth module via the environment
 # ---------------------------------------------------------------------------
@@ -107,4 +112,16 @@ variable "cognito_domain_full_url" {
 variable "app_url" {
   description = "Public URL of the deployed app (e.g., the CloudFront URL). Used to construct OAuth callback redirects."
   type        = string
+}
+
+variable "gmail_oauth_client_id" {
+  description = "Google OAuth 2.0 Client ID used for direct Gmail consent."
+  type        = string
+  sensitive   = true
+}
+
+variable "gmail_oauth_client_secret" {
+  description = "Google OAuth 2.0 Client Secret used for direct Gmail token exchange."
+  type        = string
+  sensitive   = true
 }

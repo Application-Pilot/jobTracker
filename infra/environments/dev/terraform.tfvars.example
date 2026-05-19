@@ -17,7 +17,15 @@
 #   https://jobtracker-dev.auth.us-east-1.amazoncognito.com/oauth2/idpresponse
 #   https://d2etjfsuqxfql6.cloudfront.net/api/auth/callback
 #   http://localhost:3001/api/auth/callback
+#   https://d2etjfsuqxfql6.cloudfront.net/api/gmail/callback
+#   http://localhost:3001/api/gmail/callback
 # =============================================================================
 
 google_client_id     = "1234567890-xxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
 google_client_secret = "GOCSPX-replace-with-your-actual-secret"
+
+# These can be the same OAuth client values as google_client_* while the
+# project uses one shared Google OAuth client. They are separate variables so
+# auth sign-in and Gmail API consent can be split later without code changes.
+gmail_oauth_client_id     = "1234567890-xxxxxxxxxxxxxxxxxxxxxxxxx.apps.googleusercontent.com"
+gmail_oauth_client_secret = "GOCSPX-replace-with-your-actual-secret"

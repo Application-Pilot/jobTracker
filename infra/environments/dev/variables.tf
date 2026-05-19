@@ -53,3 +53,15 @@ variable "google_client_secret" {
   type        = string
   sensitive   = true
 }
+
+variable "gmail_oauth_client_id" {
+  description = "Google OAuth 2.0 Client ID used by the app for direct Gmail readonly consent. May initially match google_client_id."
+  type        = string
+  sensitive   = true
+}
+
+variable "gmail_oauth_client_secret" {
+  description = "Google OAuth 2.0 Client Secret used by the app for direct Gmail token exchange. May initially match google_client_secret."
+  type        = string
+  sensitive   = true
+}

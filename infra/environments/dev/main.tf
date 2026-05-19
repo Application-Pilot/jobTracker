@@ -106,6 +106,8 @@ module "web" {
   users_table_name = module.data.users_table_name
   users_table_arn  = module.data.users_table_arn
 
+  token_kms_key_arn = module.auth.token_kms_key_arn
+
   # Cognito wiring — outputs from the auth module above.
   cognito_user_pool_id    = module.auth.user_pool_id
   cognito_client_id       = module.auth.client_id
@@ -113,4 +115,7 @@ module "web" {
   cognito_domain_full_url = module.auth.domain_full_url
 
   app_url = local.app_url_prod
+
+  gmail_oauth_client_id     = var.gmail_oauth_client_id
+  gmail_oauth_client_secret = var.gmail_oauth_client_secret
 }

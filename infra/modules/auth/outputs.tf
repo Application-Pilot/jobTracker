@@ -57,3 +57,13 @@ output "google_idp_callback_url" {
   description = "URL that must be registered in Google Cloud Console → OAuth client → Authorized redirect URIs."
   value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${data.aws_region.current.name}.amazoncognito.com/oauth2/idpresponse"
 }
+
+output "token_kms_key_arn" {
+  description = "KMS key ARN used by the web app to encrypt Gmail refresh tokens."
+  value       = aws_kms_key.tokens.arn
+}
+
+output "token_kms_key_alias" {
+  description = "KMS alias for the Gmail token encryption key."
+  value       = aws_kms_alias.tokens.name
+}

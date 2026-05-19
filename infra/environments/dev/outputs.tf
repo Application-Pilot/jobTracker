@@ -57,6 +57,16 @@ output "cognito_google_idp_callback_url" {
   value       = module.auth.google_idp_callback_url
 }
 
+output "token_kms_key_alias" {
+  description = "KMS alias for the Gmail token encryption key."
+  value       = module.auth.token_kms_key_alias
+}
+
+output "token_kms_key_arn" {
+  description = "KMS key ARN used to encrypt Gmail refresh tokens."
+  value       = module.auth.token_kms_key_arn
+}
+
 # -----------------------------------------------------------------------------
 # Web layer outputs
 # -----------------------------------------------------------------------------

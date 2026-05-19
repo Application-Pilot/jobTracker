@@ -278,20 +278,22 @@ resource "aws_iam_role_policy_attachment" "server_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-# Inline policy: read access to the users DynamoDB table. Scoped narrowly:
-#   - Only the Scan + Query + GetItem actions (no writes)
+# Inline policy: access to the users DynamoDB table. Scoped narrowly:
+#   - Scan + Query + GetItem for the home page
+#   - PutItem + UpdateItem for user sign-in upserts and Gmail connect state
 #   - Only on the users table ARN (not other tables)
 #
 # As the app grows we'll either expand this policy or split into multiple
-# policies for clarity. For the placeholder, "scan users for count" is
-# all we need.
+# policies for clarity.
 data "aws_iam_policy_document" "server_dynamodb" {
   statement {
     effect = "Allow"
     actions = [
+      "dynamodb:PutItem",
       "dynamodb:Scan",
       "dynamodb:Query",
       "dynamodb:GetItem",
+      "dynamodb:UpdateItem",
     ]
     resources = [
       var.users_table_arn,
@@ -304,6 +306,23 @@ resource "aws_iam_role_policy" "server_dynamodb" {
   name   = "${local.name_prefix}-web-server-dynamodb"
   role   = aws_iam_role.server.id
   policy = data.aws_iam_policy_document.server_dynamodb.json
+}
+
+data "aws_iam_policy_document" "server_kms_tokens" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "kms:Decrypt",
+      "kms:Encrypt",
+    ]
+    resources = [var.token_kms_key_arn]
+  }
+}
+
+resource "aws_iam_role_policy" "server_kms_tokens" {
+  name   = "${local.name_prefix}-web-server-kms-tokens"
+  role   = aws_iam_role.server.id
+  policy = data.aws_iam_policy_document.server_kms_tokens.json
 }
 
 # -----------------------------------------------------------------------------
@@ -360,6 +379,14 @@ resource "aws_lambda_function" "server" {
       # browser, but server-only Lambdas don't need that distinction; we
       # keep it as a plain server env var.
       APP_URL = var.app_url
+
+      # ----- Gmail OAuth wiring (Stage 2, Session B) -----
+      # Direct Google OAuth client used only for gmail.readonly consent.
+      GMAIL_OAUTH_CLIENT_ID     = var.gmail_oauth_client_id
+      GMAIL_OAUTH_CLIENT_SECRET = var.gmail_oauth_client_secret
+
+      # Customer-managed KMS key for encrypting Gmail refresh tokens.
+      TOKEN_KMS_KEY_ARN = var.token_kms_key_arn
 
       # Random secret used by the app to sign/encrypt the session cookie
       # contents (the access token is wrapped, not bare). Created by the

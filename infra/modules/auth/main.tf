@@ -223,9 +223,9 @@ resource "aws_cognito_user_pool_client" "web" {
   # Token lifetimes. id/access tokens are short-lived — the app should
   # never trust an id_token older than this. The refresh_token is the
   # long-lived credential (the cookie holds it after wrapping).
-  access_token_validity  = 60       # minutes
-  id_token_validity      = 60       # minutes
-  refresh_token_validity = 30       # days
+  access_token_validity  = 60 # minutes
+  id_token_validity      = 60 # minutes
+  refresh_token_validity = 30 # days
   token_validity_units {
     access_token  = "minutes"
     id_token      = "minutes"
@@ -249,4 +249,31 @@ resource "aws_cognito_user_pool_client" "web" {
   # before the Google IdP exists, then fail with:
   #   "InvalidParameterException: ... supportedIdentityProviders ... Google ... not found"
   depends_on = [aws_cognito_identity_provider.google]
+}
+
+# -----------------------------------------------------------------------------
+# Token Encryption Key
+# -----------------------------------------------------------------------------
+#
+# Gmail refresh tokens are short enough for direct KMS Encrypt/Decrypt
+# (KMS supports plaintext up to 4 KiB). We intentionally use one
+# environment-wide customer-managed key rather than per-user keys: it keeps
+# cost and IAM simple, while app code supplies userId as KMS encryption
+# context so CloudTrail can still show which user's token was touched.
+# -----------------------------------------------------------------------------
+
+resource "aws_kms_key" "tokens" {
+  description             = "Encrypt Gmail refresh tokens for ${local.name_prefix}"
+  deletion_window_in_days = 30
+  enable_key_rotation     = true
+
+  tags = {
+    Name      = "${local.name_prefix}-tokens"
+    Component = "auth"
+  }
+}
+
+resource "aws_kms_alias" "tokens" {
+  name          = "alias/${local.name_prefix}-tokens"
+  target_key_id = aws_kms_key.tokens.key_id
 }
