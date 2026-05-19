@@ -17,8 +17,10 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { exchangeCodeForTokens } from '@/lib/cognito';
+import { verifyToken } from '@/lib/auth';
 import { setSessionCookie } from '@/lib/session';
 import { verifyState } from '@/lib/state';
+import { upsertSignedInUser } from '@/lib/users';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +57,17 @@ export async function GET(req: NextRequest) {
   if (!tokens) {
     return new NextResponse('Token exchange failed', { status: 500 });
   }
+
+  const claims = await verifyToken(tokens.id_token);
+  if (!claims) {
+    return new NextResponse('Token verification failed', { status: 500 });
+  }
+
+  await upsertSignedInUser({
+    userId: claims.sub,
+    email: claims.email,
+    name: claims.name,
+  });
 
   // Send the user back to the home page, now authenticated.
   //
